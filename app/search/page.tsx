@@ -1,0 +1,270 @@
+'use client'
+
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { useAppStore } from '@/lib/store'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { BottomNav } from '@/components/layout/BottomNav'
+import { AddFoodDialog } from '@/components/food/AddFoodDialog'
+import { CustomFoodDialog } from '@/components/food/CustomFoodDialog'
+import { Search, ArrowLeft, Plus, Clock, Star } from 'lucide-react'
+import type { Food, MealType, OFFProduct } from '@/types'
+
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '點心',
+}
+
+function parseOFFProduct(p: OFFProduct): Omit<Food, 'id' | 'created_by' | 'created_at'> {
+  const n = p.nutriments
+  const per100 = n['energy-kcal_100g'] != null
+  const cal = per100 ? (n['energy-kcal_100g'] || 0) : (n['energy-kcal_serving'] || 0)
+  const servingG = p.serving_quantity || 100
+  const factor = per100 ? servingG / 100 : 1
+
+  return {
+    barcode: p.code || null,
+    name: p.product_name || '未知食品',
+    name_zh: (p as unknown as Record<string, string>)['product_name_zh-TW'] || null,
+    brand: p.brands || null,
+    serving_size_g: servingG,
+    serving_unit: p.serving_size || '份',
+    calories_per_serving: parseFloat(((per100 ? n['energy-kcal_100g']! : n['energy-kcal_serving'] || 0) * factor / (per100 ? 1 : 1)).toFixed(1)),
+    protein_per_serving: parseFloat(((per100 ? n.proteins_100g || 0 : n.proteins_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
+    carbs_per_serving: parseFloat(((per100 ? n.carbohydrates_100g || 0 : n.carbohydrates_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
+    fat_per_serving: parseFloat(((per100 ? n.fat_100g || 0 : n.fat_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
+    fiber_per_serving: parseFloat(((per100 ? n.fiber_100g || 0 : 0) * (per100 ? factor : 1)).toFixed(1)),
+    is_custom: false,
+    source: 'off' as const,
+  }
+}
+
+function SearchContent() {
+  const router = useRouter()
+  const params = useSearchParams()
+  const mealType = (params.get('meal') || 'breakfast') as MealType
+  const selectedDate = params.get('date') || ''
+
+  const supabase = createClient()
+  const { activeProfile } = useAppStore()
+  const profile = activeProfile()
+
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<OFFProduct[]>([])
+  const [recentFoods, setRecentFoods] = useState<Food[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
+  const [showCustom, setShowCustom] = useState(false)
+
+  useEffect(() => { loadRecentFoods() }, [])
+
+  async function loadRecentFoods() {
+    if (!profile) return
+    const { data } = await supabase
+      .from('meal_entries')
+      .select('food:foods(*)')
+      .eq('profile_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    if (data) {
+      const unique = Array.from(
+        new Map(data.map((e: { food: unknown }) => [(e.food as Food).id, e.food as Food])).values()
+      ).slice(0, 8) as Food[]
+      setRecentFoods(unique)
+    }
+  }
+
+  const doSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setResults([]); return }
+    setSearching(true)
+    const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
+    const data = await res.json()
+    setResults(data.products || [])
+    setSearching(false)
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => doSearch(query), 500)
+    return () => clearTimeout(timer)
+  }, [query, doSearch])
+
+  function selectOFFProduct(p: OFFProduct) {
+    setSelectedFood(parseOFFProduct(p))
+  }
+
+  async function selectExistingFood(food: Food) {
+    setSelectedFood({
+      barcode: food.barcode,
+      name: food.name,
+      name_zh: food.name_zh,
+      brand: food.brand,
+      serving_size_g: food.serving_size_g,
+      serving_unit: food.serving_unit,
+      calories_per_serving: food.calories_per_serving,
+      protein_per_serving: food.protein_per_serving,
+      carbs_per_serving: food.carbs_per_serving,
+      fat_per_serving: food.fat_per_serving,
+      fiber_per_serving: food.fiber_per_serving,
+      is_custom: food.is_custom,
+      source: food.source,
+    })
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Header */}
+      <div className="bg-white border-b sticky top-0 z-10">
+        <div className="max-w-lg mx-auto px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button onClick={() => router.back()} className="text-gray-500">
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                className="pl-9 rounded-full bg-gray-100 border-0"
+                placeholder="搜尋食物名稱..."
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-gray-400">新增到</span>
+            <Badge variant="secondary" className="text-xs">{MEAL_LABELS[mealType]}</Badge>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-4">
+        {/* Recent foods */}
+        {!query && recentFoods.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Clock className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">最近使用</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {recentFoods.map(food => (
+                <FoodRow
+                  key={food.id}
+                  name={food.name_zh || food.name}
+                  brand={food.brand}
+                  calories={food.calories_per_serving}
+                  servingUnit={food.serving_unit}
+                  onClick={() => selectExistingFood(food)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Search results */}
+        {searching && (
+          <div className="text-center py-8 text-gray-400 text-sm">搜尋中...</div>
+        )}
+
+        {!searching && query && results.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Search className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">搜尋結果</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {results.map((p, i) => (
+                <FoodRow
+                  key={i}
+                  name={(p as unknown as Record<string, string>)['product_name_zh-TW'] || p.product_name}
+                  brand={p.brands}
+                  calories={p.nutriments['energy-kcal_serving'] || p.nutriments['energy-kcal_100g'] || 0}
+                  servingUnit={p.serving_size || '份'}
+                  onClick={() => selectOFFProduct(p)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!searching && query && results.length === 0 && (
+          <div className="text-center py-6 space-y-3">
+            <p className="text-gray-400 text-sm">找不到「{query}」的結果</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCustom(true)}
+              className="gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              自行新增食物
+            </Button>
+          </div>
+        )}
+
+        {/* Add custom food button */}
+        {!query && (
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => setShowCustom(true)}
+          >
+            <Plus className="h-4 w-4" />
+            自行新增食物
+          </Button>
+        )}
+      </div>
+
+      {/* Add food dialog */}
+      {selectedFood && profile && (
+        <AddFoodDialog
+          food={selectedFood}
+          profileId={profile.id}
+          mealType={mealType}
+          logDate={selectedDate}
+          onClose={() => setSelectedFood(null)}
+          onAdded={() => { router.back() }}
+        />
+      )}
+
+      {/* Custom food dialog */}
+      {showCustom && profile && (
+        <CustomFoodDialog
+          profileId={profile.id}
+          mealType={mealType}
+          logDate={selectedDate}
+          onClose={() => setShowCustom(false)}
+          onAdded={() => { router.back() }}
+        />
+      )}
+
+      <BottomNav />
+    </div>
+  )
+}
+
+function FoodRow({ name, brand, calories, servingUnit, onClick }: {
+  name: string; brand?: string | null; calories: number; servingUnit: string; onClick: () => void
+}) {
+  return (
+    <button onClick={onClick} className="w-full flex items-center px-4 py-3 gap-3 hover:bg-gray-50 text-left">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
+        {brand && <p className="text-xs text-gray-400 truncate">{brand}</p>}
+      </div>
+      <div className="text-right shrink-0">
+        <p className="text-sm font-semibold text-gray-700">{Math.round(calories)}</p>
+        <p className="text-xs text-gray-400">kcal/{servingUnit}</p>
+      </div>
+    </button>
+  )
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense>
+      <SearchContent />
+    </Suspense>
+  )
+}
