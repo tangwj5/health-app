@@ -53,6 +53,7 @@ function SearchContent() {
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<OFFProduct[]>([])
+  const [customResults, setCustomResults] = useState<Food[]>([])
   const [recentFoods, setRecentFoods] = useState<Food[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
@@ -77,13 +78,16 @@ function SearchContent() {
   }
 
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); return }
+    if (!q.trim()) { setResults([]); setCustomResults([]); return }
     setSearching(true)
-    const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`)
-    const data = await res.json()
-    setResults(data.products || [])
+    const [offRes, { data: customFoods }] = await Promise.all([
+      fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()),
+      supabase.from('foods').select('*').eq('source', 'custom').ilike('name', `%${q}%`).limit(10),
+    ])
+    setResults(offRes.products || [])
+    setCustomResults((customFoods as Food[]) || [])
     setSearching(false)
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     const timer = setTimeout(() => doSearch(query), 500)
@@ -167,6 +171,27 @@ function SearchContent() {
           <div className="text-center py-8 text-gray-400 text-sm">搜尋中...</div>
         )}
 
+        {!searching && query && customResults.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Star className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">自訂食物</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {customResults.map(food => (
+                <FoodRow
+                  key={food.id}
+                  name={food.name}
+                  brand={food.brand}
+                  calories={food.calories_per_serving}
+                  servingUnit={food.serving_unit}
+                  onClick={() => selectExistingFood(food)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {!searching && query && results.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -188,7 +213,7 @@ function SearchContent() {
           </div>
         )}
 
-        {!searching && query && results.length === 0 && (
+        {!searching && query && results.length === 0 && customResults.length === 0 && (
           <div className="text-center py-6 space-y-3">
             <p className="text-gray-400 text-sm">找不到「{query}」的結果</p>
             <Button
