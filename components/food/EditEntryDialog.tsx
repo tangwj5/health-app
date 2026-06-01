@@ -107,7 +107,7 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
             <Label>份量（{entry.quantity_unit === 'g' ? 'g' : food.serving_unit}）</Label>
             <div className="flex gap-2 items-center">
               <button
-                onClick={() => setQuantity(v => String(Math.max(0.5, parseFloat(v) - (entry.quantity_unit === 'g' ? 10 : 0.5)))}
+                onClick={() => setQuantity(v => String(Math.max(0.5, parseFloat(v) - (entry.quantity_unit === 'g' ? 10 : 0.5))))}
                 className="w-10 h-10 rounded-full border text-xl font-light text-gray-600 hover:bg-gray-100 shrink-0"
               >−</button>
               <Input
