@@ -55,12 +55,23 @@ function SearchContent() {
   const [results, setResults] = useState<OFFProduct[]>([])
   const [customResults, setCustomResults] = useState<Food[]>([])
   const [recentFoods, setRecentFoods] = useState<Food[]>([])
+  const [allCustomFoods, setAllCustomFoods] = useState<Food[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
   const [selectedFoodId, setSelectedFoodId] = useState<string | undefined>(undefined)
   const [showCustom, setShowCustom] = useState(false)
 
-  useEffect(() => { loadRecentFoods() }, [])
+  useEffect(() => { loadRecentFoods(); loadAllCustomFoods() }, [])
+
+  async function loadAllCustomFoods() {
+    const { data } = await supabase
+      .from('foods')
+      .select('*')
+      .eq('source', 'custom')
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (data) setAllCustomFoods(data as Food[])
+  }
 
   async function loadRecentFoods() {
     if (!profile) return
@@ -155,6 +166,28 @@ function SearchContent() {
             </div>
             <div className="bg-white rounded-2xl border divide-y overflow-hidden">
               {recentFoods.map(food => (
+                <FoodRow
+                  key={food.id}
+                  name={food.name_zh || food.name}
+                  brand={food.brand}
+                  calories={food.calories_per_serving}
+                  servingUnit={food.serving_unit}
+                  onClick={() => selectExistingFood(food)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* All custom foods (shown when no query) */}
+        {!query && allCustomFoods.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Star className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">自訂食物</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {allCustomFoods.map(food => (
                 <FoodRow
                   key={food.id}
                   name={food.name_zh || food.name}
