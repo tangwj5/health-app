@@ -10,6 +10,7 @@ import { MealSection } from '@/components/diary/MealSection'
 import { NutritionSummary } from '@/components/diary/NutritionSummary'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { BottomNav } from '@/components/layout/BottomNav'
+import { EditEntryDialog } from '@/components/food/EditEntryDialog'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MealEntry, MealType, Profile } from '@/types'
 
@@ -26,6 +27,7 @@ export default function DiaryPage() {
   const { activeSlot, setActiveSlot, profiles, setProfiles, selectedDate, setSelectedDate, activeProfile } = useAppStore()
   const [entries, setEntries] = useState<MealEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null)
 
   useEffect(() => {
     loadProfiles()
@@ -147,11 +149,20 @@ export default function DiaryPage() {
             profileId={profile?.id || ''}
             selectedDate={selectedDate}
             onDelete={deleteEntry}
+            onEdit={setEditingEntry}
             onCopyYesterday={() => copyYesterday(key)}
             onAddEntry={() => router.push(`/search?meal=${key}&date=${selectedDate}`)}
             onRefresh={loadEntries}
           />
         ))}
+
+        {editingEntry && (
+          <EditEntryDialog
+            entry={editingEntry}
+            onClose={() => setEditingEntry(null)}
+            onSaved={() => { setEditingEntry(null); loadEntries() }}
+          />
+        )}
       </div>
 
       <BottomNav />

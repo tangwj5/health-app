@@ -16,6 +16,7 @@ interface PersonForm {
   gender: Gender
   birth_year: string
   height_cm: string
+  weight_kg: string
   activity_level: ActivityLevel
   goal: GoalType
 }
@@ -25,6 +26,7 @@ const defaultForm = (): PersonForm => ({
   gender: 'male',
   birth_year: '1990',
   height_cm: '170',
+  weight_kg: '65',
   activity_level: 'moderate',
   goal: 'maintain',
 })
@@ -73,7 +75,7 @@ export default function SetupPage() {
     if (!user) { setError('請重新登入'); setLoading(false); return }
 
     const profiles = [person1, person2].map((p, i) => {
-      const weightKg = 65
+      const weightKg = parseFloat(p.weight_kg) || 65
       const bmr = calcBMR(p.gender, weightKg, parseFloat(p.height_cm), parseInt(p.birth_year))
       return {
         auth_user_id: user.id,
@@ -82,6 +84,7 @@ export default function SetupPage() {
         gender: p.gender,
         birth_year: parseInt(p.birth_year),
         height_cm: parseFloat(p.height_cm),
+        weight_kg: weightKg,
         activity_level: p.activity_level,
         goal: p.goal,
         calorie_target: calcCalorieTarget(bmr, p.activity_level, p.goal),
@@ -149,17 +152,31 @@ export default function SetupPage() {
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>身高（cm）</Label>
-              <Input
-                type="number"
-                value={currentForm.height_cm}
-                onChange={e => updateField('height_cm', e.target.value)}
-                min={100}
-                max={220}
-                step={0.1}
-                required
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>身高（cm）</Label>
+                <Input
+                  type="number"
+                  value={currentForm.height_cm}
+                  onChange={e => updateField('height_cm', e.target.value)}
+                  min={100}
+                  max={220}
+                  step={0.1}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>體重（kg）</Label>
+                <Input
+                  type="number"
+                  value={currentForm.weight_kg}
+                  onChange={e => updateField('weight_kg', e.target.value)}
+                  min={30}
+                  max={200}
+                  step={0.1}
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">

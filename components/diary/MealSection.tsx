@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Copy, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Plus, Copy, ChevronDown, ChevronUp, Trash2, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { MealEntry, MealType } from '@/types'
 
@@ -12,6 +12,7 @@ interface Props {
   profileId: string
   selectedDate: string
   onDelete: (id: string) => void
+  onEdit: (entry: MealEntry) => void
   onCopyYesterday: () => void
   onAddEntry: () => void
   onRefresh: () => void
@@ -25,7 +26,7 @@ const MEAL_ICONS: Record<MealType, string> = {
 }
 
 export function MealSection({
-  mealType, label, entries, onDelete, onCopyYesterday, onAddEntry
+  mealType, label, entries, onDelete, onEdit, onCopyYesterday, onAddEntry
 }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const [copying, setCopying] = useState(false)
@@ -62,7 +63,7 @@ export function MealSection({
           {entries.length > 0 && (
             <div className="border-t divide-y">
               {entries.map(entry => (
-                <FoodEntryRow key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} />
+                <FoodEntryRow key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} onEdit={() => onEdit(entry)} />
               ))}
             </div>
           )}
@@ -94,14 +95,14 @@ export function MealSection({
   )
 }
 
-function FoodEntryRow({ entry, onDelete }: { entry: MealEntry; onDelete: () => void }) {
+function FoodEntryRow({ entry, onDelete, onEdit }: { entry: MealEntry; onDelete: () => void; onEdit: () => void }) {
   const food = entry.food
   const quantityLabel = entry.quantity_unit === 'g'
     ? `${entry.quantity}g`
     : `${entry.quantity} ${food.serving_unit}`
 
   return (
-    <div className="flex items-center px-4 py-2.5 gap-3 group">
+    <div className="flex items-center px-4 py-2.5 gap-2">
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-800 truncate">
           {food.name_zh || food.name}
@@ -112,10 +113,12 @@ function FoodEntryRow({ entry, onDelete }: { entry: MealEntry; onDelete: () => v
         <p className="text-sm font-semibold text-gray-700">{Math.round(entry.calories)}</p>
         <p className="text-xs text-gray-400">kcal</p>
       </div>
-      <button
-        onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-red-400 hover:text-red-600"
-      >
+      {food.is_custom && (
+        <button onClick={onEdit} className="p-1 text-gray-400 hover:text-blue-500">
+          <Pencil className="h-4 w-4" />
+        </button>
+      )}
+      <button onClick={onDelete} className="p-1 text-gray-400 hover:text-red-500">
         <Trash2 className="h-4 w-4" />
       </button>
     </div>

@@ -57,6 +57,7 @@ function SearchContent() {
   const [recentFoods, setRecentFoods] = useState<Food[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
+  const [selectedFoodId, setSelectedFoodId] = useState<string | undefined>(undefined)
   const [showCustom, setShowCustom] = useState(false)
 
   useEffect(() => { loadRecentFoods() }, [])
@@ -98,7 +99,8 @@ function SearchContent() {
     setSelectedFood(parseOFFProduct(p))
   }
 
-  async function selectExistingFood(food: Food) {
+  function selectExistingFood(food: Food) {
+    setSelectedFoodId(food.id)
     setSelectedFood({
       barcode: food.barcode,
       name: food.name,
@@ -245,10 +247,11 @@ function SearchContent() {
       {selectedFood && profile && (
         <AddFoodDialog
           food={selectedFood}
+          foodId={selectedFoodId}
           profileId={profile.id}
           mealType={mealType}
           logDate={selectedDate}
-          onClose={() => setSelectedFood(null)}
+          onClose={() => { setSelectedFood(null); setSelectedFoodId(undefined) }}
           onAdded={() => { router.back() }}
         />
       )}

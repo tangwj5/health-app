@@ -11,6 +11,7 @@ import type { Food, MealType } from '@/types'
 
 interface Props {
   food: Omit<Food, 'id' | 'created_by' | 'created_at'>
+  foodId?: string
   profileId: string
   mealType: MealType
   logDate: string
@@ -18,7 +19,7 @@ interface Props {
   onAdded: () => void
 }
 
-export function AddFoodDialog({ food, profileId, mealType, logDate, onClose, onAdded }: Props) {
+export function AddFoodDialog({ food, foodId, profileId, mealType, logDate, onClose, onAdded }: Props) {
   const supabase = createClient()
   const [quantityUnit, setQuantityUnit] = useState<'serving' | 'g'>('serving')
   const [quantity, setQuantity] = useState('1')
@@ -38,39 +39,39 @@ export function AddFoodDialog({ food, profileId, mealType, logDate, onClose, onA
     setLoading(true)
 
     // Upsert food to local cache if from OFF
-    let foodId: string
-    if (food.source === 'off' && food.barcode) {
-      const { data: existing } = await supabase
-        .from('foods')
-        .select('id')
-        .eq('barcode', food.barcode)
-        .single()
-      if (existing) {
-        foodId = existing.id
-      } else {
+    let resolvedFoodId: string | undefined = foodId
+    if (!resolvedFoodId) {
+      if (food.source === 'off' && food.barcode) {
+        const { data: existing } = await supabase
+          .from('foods')
+          .select('id')
+          .eq('barcode', food.barcode)
+          .single()
+        if (existing) {
+          resolvedFoodId = existing.id
+        } else {
+          const { data: newFood } = await supabase
+            .from('foods')
+            .insert({ ...food, created_by: null })
+            .select('id')
+            .single()
+          resolvedFoodId = newFood?.id
+        }
+      } else if (food.source === 'off') {
         const { data: newFood } = await supabase
           .from('foods')
           .insert({ ...food, created_by: null })
           .select('id')
           .single()
-        foodId = newFood?.id
+        resolvedFoodId = newFood?.id
       }
-    } else if (food.source === 'off') {
-      const { data: newFood } = await supabase
-        .from('foods')
-        .insert({ ...food, created_by: null })
-        .select('id')
-        .single()
-      foodId = newFood?.id
-    } else {
-      foodId = (food as Food).id
     }
 
     await supabase.from('meal_entries').insert({
       profile_id: profileId,
       log_date: logDate,
       meal_type: mealType,
-      food_id: foodId,
+      food_id: resolvedFoodId,
       quantity: qty,
       quantity_unit: quantityUnit,
       calories,

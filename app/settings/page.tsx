@@ -52,7 +52,7 @@ export default function SettingsPage() {
         display_name: profile.display_name,
         birth_year: String(profile.birth_year),
         height_cm: String(profile.height_cm),
-        weight_kg: '65',
+        weight_kg: String(profile.weight_kg || 65),
         activity_level: profile.activity_level,
         goal: profile.goal,
       })
@@ -69,6 +69,7 @@ export default function SettingsPage() {
       display_name: form.display_name,
       birth_year: parseInt(form.birth_year),
       height_cm: parseFloat(form.height_cm),
+      weight_kg: weightKg,
       activity_level: form.activity_level,
       goal: form.goal,
       calorie_target: calcCalorieTarget(bmr, form.activity_level, form.goal),

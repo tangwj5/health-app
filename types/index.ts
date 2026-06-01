@@ -13,6 +13,7 @@ export interface Profile {
   height_cm: number
   activity_level: ActivityLevel
   goal: GoalType
+  weight_kg: number
   calorie_target: number
   protein_target: number
   created_at: string
