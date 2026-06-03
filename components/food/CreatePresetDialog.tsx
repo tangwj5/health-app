@@ -15,21 +15,29 @@ interface SelectedItem {
 }
 
 interface Props {
-  profileId: string
+  profileId?: string
   preset?: MealPreset
   onClose: () => void
   onSaved: () => void
 }
 
-export function CreatePresetDialog({ profileId, preset, onClose, onSaved }: Props) {
+export function CreatePresetDialog({ profileId: profileIdProp, preset, onClose, onSaved }: Props) {
   const supabase = createClient()
   const [name, setName] = useState(preset?.name ?? '')
   const [allFoods, setAllFoods] = useState<Food[]>([])
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [profileId, setProfileId] = useState(profileIdProp ?? '')
 
   useEffect(() => { loadFoods() }, [])
+
+  useEffect(() => {
+    if (!profileId) {
+      supabase.from('profiles').select('id').order('slot').limit(1).single()
+        .then(({ data }) => { if (data) setProfileId(data.id) })
+    }
+  }, [])
 
   async function loadFoods() {
     const { data } = await supabase

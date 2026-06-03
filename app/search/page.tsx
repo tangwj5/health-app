@@ -14,7 +14,7 @@ import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed } from 'l
 import { EditFoodDialog } from '@/components/food/EditFoodDialog'
 import { CreatePresetDialog } from '@/components/food/CreatePresetDialog'
 import { UsePresetDialog } from '@/components/food/UsePresetDialog'
-import type { Food, MealType, MealPreset, OFFProduct } from '@/types'
+import type { Food, MealType, MealPreset, OFFProduct, Profile } from '@/types'
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '點心',
@@ -53,7 +53,7 @@ function SearchContent() {
   const selectedDate = params.get('date') || ''
 
   const supabase = createClient()
-  const { activeProfile } = useAppStore()
+  const { activeProfile, profiles, setProfiles } = useAppStore()
   const profile = activeProfile()
 
   const [query, setQuery] = useState('')
@@ -71,7 +71,22 @@ function SearchContent() {
   const [editingPreset, setEditingPreset] = useState<MealPreset | null>(null)
   const [showCreatePreset, setShowCreatePreset] = useState(false)
 
-  useEffect(() => { loadRecentFoods(); loadAllCustomFoods(); loadPresets() }, [])
+  useEffect(() => {
+    const init = async () => {
+      if (profiles.length === 0) {
+        const { data } = await supabase.from('profiles').select('*').order('slot')
+        if (data && data.length > 0) setProfiles(data as Profile[])
+      }
+      loadAllCustomFoods()
+      loadPresets()
+    }
+    init()
+  }, [])
+
+  // Run after profiles are set so profile is non-null
+  useEffect(() => {
+    loadRecentFoods()
+  }, [profiles])
 
   async function loadPresets() {
     const { data } = await supabase
@@ -372,18 +387,18 @@ function SearchContent() {
       )}
 
       {/* Create preset dialog */}
-      {showCreatePreset && profile && (
+      {showCreatePreset && (
         <CreatePresetDialog
-          profileId={profile.id}
+          profileId={profile?.id}
           onClose={() => setShowCreatePreset(false)}
           onSaved={() => { setShowCreatePreset(false); loadPresets() }}
         />
       )}
 
       {/* Edit preset dialog */}
-      {editingPreset && profile && (
+      {editingPreset && (
         <CreatePresetDialog
-          profileId={profile.id}
+          profileId={profile?.id}
           preset={editingPreset}
           onClose={() => setEditingPreset(null)}
           onSaved={() => { setEditingPreset(null); loadPresets() }}
