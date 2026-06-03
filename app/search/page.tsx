@@ -126,6 +126,8 @@ function SearchContent() {
       carbs_per_serving: food.carbs_per_serving,
       fat_per_serving: food.fat_per_serving,
       fiber_per_serving: food.fiber_per_serving,
+      sugar_per_serving: food.sugar_per_serving ?? 0,
+      trans_fat_per_serving: food.trans_fat_per_serving ?? 0,
       is_custom: food.is_custom,
       source: food.source,
     })
