@@ -50,8 +50,19 @@ export function EditFoodDialog({ food, onClose, onSaved }: Props) {
   async function handleDelete() {
     if (!confirm(`確定要刪除「${food.name}」嗎？`)) return
     setLoading(true)
-    await supabase.from('foods').delete().eq('id', food.id)
+    const { error, count } = await supabase
+      .from('foods')
+      .delete({ count: 'exact' })
+      .eq('id', food.id)
     setLoading(false)
+    if (error) {
+      alert('刪除失敗：此食物可能有相關餐點記錄，請先從日記中刪除相關記錄。\n' + error.message)
+      return
+    }
+    if (!count || count === 0) {
+      alert('刪除失敗：沒有權限刪除此食物，請聯繫管理員確認資料庫設定。')
+      return
+    }
     onSaved()
   }
 
