@@ -28,6 +28,8 @@ export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdde
     protein_per_serving: '0',
     carbs_per_serving: '0',
     fat_per_serving: '0',
+    sugar_per_serving: '0',
+    trans_fat_per_serving: '0',
   })
 
   function update(field: string, value: string) {
@@ -50,6 +52,8 @@ export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdde
         carbs_per_serving: parseFloat(form.carbs_per_serving),
         fat_per_serving: parseFloat(form.fat_per_serving),
         fiber_per_serving: 0,
+        sugar_per_serving: parseFloat(form.sugar_per_serving) || 0,
+        trans_fat_per_serving: parseFloat(form.trans_fat_per_serving) || 0,
         is_custom: true,
         created_by: profileId,
         source: 'custom',
@@ -69,6 +73,8 @@ export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdde
         protein: parseFloat(form.protein_per_serving),
         carbs: parseFloat(form.carbs_per_serving),
         fat: parseFloat(form.fat_per_serving),
+        sugar: parseFloat(form.sugar_per_serving) || 0,
+        trans_fat: parseFloat(form.trans_fat_per_serving) || 0,
       })
       onAdded()
     }
@@ -116,6 +122,16 @@ export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdde
             <div className="space-y-1.5">
               <Label className="text-xs">脂肪 (g)</Label>
               <Input type="number" value={form.fat_per_serving} onChange={e => update('fat_per_serving', e.target.value)} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">糖 (g)</Label>
+              <Input type="number" value={form.sugar_per_serving} onChange={e => update('sugar_per_serving', e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">反式脂肪 (g)</Label>
+              <Input type="number" value={form.trans_fat_per_serving} onChange={e => update('trans_fat_per_serving', e.target.value)} />
             </div>
           </div>
           <Button

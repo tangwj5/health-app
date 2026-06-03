@@ -24,6 +24,8 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
   const [protein, setProtein] = useState(String(food.protein_per_serving))
   const [carbs, setCarbs] = useState(String(food.carbs_per_serving))
   const [fat, setFat] = useState(String(food.fat_per_serving))
+  const [sugar, setSugar] = useState(String(food.sugar_per_serving ?? 0))
+  const [transFat, setTransFat] = useState(String(food.trans_fat_per_serving ?? 0))
   const [loading, setLoading] = useState(false)
 
   async function handleSave() {
@@ -33,6 +35,8 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
     const protPer = parseFloat(protein) || 0
     const carbPer = parseFloat(carbs) || 0
     const fatPer = parseFloat(fat) || 0
+    const sugarPer = parseFloat(sugar) || 0
+    const transFatPer = parseFloat(transFat) || 0
 
     const factor = entry.quantity_unit === 'g'
       ? qty / food.serving_size_g
@@ -45,6 +49,8 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
         protein_per_serving: protPer,
         carbs_per_serving: carbPer,
         fat_per_serving: fatPer,
+        sugar_per_serving: sugarPer,
+        trans_fat_per_serving: transFatPer,
       }).eq('id', food.id)
     }
 
@@ -56,6 +62,8 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
     const updatedProt = isCustom ? parseFloat((protPer * entryFactor).toFixed(1)) : parseFloat((food.protein_per_serving * factor).toFixed(1))
     const updatedCarbs = isCustom ? parseFloat((carbPer * entryFactor).toFixed(1)) : parseFloat((food.carbs_per_serving * factor).toFixed(1))
     const updatedFat = isCustom ? parseFloat((fatPer * entryFactor).toFixed(1)) : parseFloat((food.fat_per_serving * factor).toFixed(1))
+    const updatedSugar = isCustom ? parseFloat((sugarPer * entryFactor).toFixed(1)) : parseFloat(((food.sugar_per_serving ?? 0) * factor).toFixed(1))
+    const updatedTransFat = isCustom ? parseFloat((transFatPer * entryFactor).toFixed(1)) : parseFloat(((food.trans_fat_per_serving ?? 0) * factor).toFixed(1))
 
     await supabase.from('meal_entries').update({
       quantity: qty,
@@ -63,6 +71,8 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
       protein: updatedProt,
       carbs: updatedCarbs,
       fat: updatedFat,
+      sugar: updatedSugar,
+      trans_fat: updatedTransFat,
     }).eq('id', entry.id)
 
     setLoading(false)
@@ -98,6 +108,14 @@ export function EditEntryDialog({ entry, onClose, onSaved }: Props) {
                 <div className="space-y-1.5">
                   <Label>脂肪 (g)</Label>
                   <Input type="number" value={fat} onChange={e => setFat(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>糖 (g)</Label>
+                  <Input type="number" value={sugar} onChange={e => setSugar(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>反式脂肪 (g)</Label>
+                  <Input type="number" value={transFat} onChange={e => setTransFat(e.target.value)} />
                 </div>
               </div>
               <hr />

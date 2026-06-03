@@ -34,6 +34,8 @@ export function AddFoodDialog({ food, foodId, profileId, mealType, logDate, onCl
   const protein = parseFloat((food.protein_per_serving * factor).toFixed(1))
   const carbs = parseFloat((food.carbs_per_serving * factor).toFixed(1))
   const fat = parseFloat((food.fat_per_serving * factor).toFixed(1))
+  const sugar = parseFloat(((food.sugar_per_serving ?? 0) * factor).toFixed(1))
+  const trans_fat = parseFloat(((food.trans_fat_per_serving ?? 0) * factor).toFixed(1))
 
   async function handleAdd() {
     setLoading(true)
@@ -78,6 +80,8 @@ export function AddFoodDialog({ food, foodId, profileId, mealType, logDate, onCl
       protein,
       carbs,
       fat,
+      sugar,
+      trans_fat,
     })
 
     setLoading(false)
@@ -149,23 +153,37 @@ export function AddFoodDialog({ food, foodId, profileId, mealType, logDate, onCl
           </div>
 
           {/* Preview */}
-          <div className="bg-gray-50 rounded-xl p-3 grid grid-cols-4 gap-2 text-center">
-            <div>
-              <p className="text-lg font-bold text-gray-800">{calories}</p>
-              <p className="text-xs text-gray-400">kcal</p>
+          <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div>
+                <p className="text-lg font-bold text-gray-800">{calories}</p>
+                <p className="text-xs text-gray-400">kcal</p>
+              </div>
+              <div>
+                <p className="text-base font-semibold text-blue-600">{protein}g</p>
+                <p className="text-xs text-gray-400">蛋白質</p>
+              </div>
+              <div>
+                <p className="text-base font-semibold text-yellow-500">{carbs}g</p>
+                <p className="text-xs text-gray-400">碳水</p>
+              </div>
+              <div>
+                <p className="text-base font-semibold text-orange-500">{fat}g</p>
+                <p className="text-xs text-gray-400">脂肪</p>
+              </div>
             </div>
-            <div>
-              <p className="text-base font-semibold text-blue-600">{protein}g</p>
-              <p className="text-xs text-gray-400">蛋白質</p>
-            </div>
-            <div>
-              <p className="text-base font-semibold text-yellow-500">{carbs}g</p>
-              <p className="text-xs text-gray-400">碳水</p>
-            </div>
-            <div>
-              <p className="text-base font-semibold text-orange-500">{fat}g</p>
-              <p className="text-xs text-gray-400">脂肪</p>
-            </div>
+            {(sugar > 0 || trans_fat > 0) && (
+              <div className="grid grid-cols-2 gap-2 text-center pt-1 border-t border-gray-200">
+                <div>
+                  <p className="text-sm font-semibold text-pink-500">{sugar}g</p>
+                  <p className="text-xs text-gray-400">糖</p>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-600">{trans_fat}g</p>
+                  <p className="text-xs text-gray-400">反式脂肪</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Button

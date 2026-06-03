@@ -11,6 +11,7 @@ import { NutritionSummary } from '@/components/diary/NutritionSummary'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { EditEntryDialog } from '@/components/food/EditEntryDialog'
+import { WeeklyNutritionChart } from '@/components/diary/WeeklyNutritionChart'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MealEntry, MealType, Profile } from '@/types'
 
@@ -134,6 +135,16 @@ export default function DiaryPage() {
         {profile && (
           <NutritionSummary
             entries={entries}
+            calorieTarget={profile.calorie_target}
+            proteinTarget={profile.protein_target}
+          />
+        )}
+
+        {/* Weekly chart */}
+        {profile && (
+          <WeeklyNutritionChart
+            profileId={profile.id}
+            selectedDate={selectedDate}
             calorieTarget={profile.calorie_target}
             proteinTarget={profile.protein_target}
           />

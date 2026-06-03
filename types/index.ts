@@ -32,6 +32,8 @@ export interface Food {
   carbs_per_serving: number
   fat_per_serving: number
   fiber_per_serving: number
+  sugar_per_serving: number
+  trans_fat_per_serving: number
   is_custom: boolean
   created_by: string | null
   source: 'off' | 'custom'
@@ -50,6 +52,8 @@ export interface MealEntry {
   protein: number
   carbs: number
   fat: number
+  sugar: number
+  trans_fat: number
   notes: string | null
   created_at: string
 }
@@ -76,6 +80,8 @@ export interface DayNutrition {
   protein: number
   carbs: number
   fat: number
+  sugar: number
+  trans_fat: number
 }
 
 export interface OFFProduct {
@@ -93,6 +99,10 @@ export interface OFFProduct {
     fat_serving?: number
     fiber_100g?: number
     fiber_serving?: number
+    sugars_100g?: number
+    sugars_serving?: number
+    'trans-fat_100g'?: number
+    'trans-fat_serving'?: number
   }
   serving_size?: string
   serving_quantity?: number

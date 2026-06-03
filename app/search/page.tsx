@@ -36,6 +36,8 @@ function parseOFFProduct(p: OFFProduct): Omit<Food, 'id' | 'created_by' | 'creat
     carbs_per_serving: parseFloat(((per100 ? n.carbohydrates_100g || 0 : n.carbohydrates_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
     fat_per_serving: parseFloat(((per100 ? n.fat_100g || 0 : n.fat_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
     fiber_per_serving: parseFloat(((per100 ? n.fiber_100g || 0 : 0) * (per100 ? factor : 1)).toFixed(1)),
+    sugar_per_serving: parseFloat(((per100 ? n.sugars_100g || 0 : n.sugars_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
+    trans_fat_per_serving: parseFloat(((per100 ? n['trans-fat_100g'] || 0 : n['trans-fat_serving'] || 0) * (per100 ? factor : 1)).toFixed(1)),
     is_custom: false,
     source: 'off' as const,
   }
