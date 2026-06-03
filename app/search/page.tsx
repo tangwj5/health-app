@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AddFoodDialog } from '@/components/food/AddFoodDialog'
 import { CustomFoodDialog } from '@/components/food/CustomFoodDialog'
-import { Search, ArrowLeft, Plus, Clock, Star, Pencil } from 'lucide-react'
+import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed } from 'lucide-react'
 import { EditFoodDialog } from '@/components/food/EditFoodDialog'
-import type { Food, MealType, OFFProduct } from '@/types'
+import { CreatePresetDialog } from '@/components/food/CreatePresetDialog'
+import { UsePresetDialog } from '@/components/food/UsePresetDialog'
+import type { Food, MealType, MealPreset, OFFProduct } from '@/types'
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '早餐', lunch: '午餐', dinner: '晚餐', snack: '點心',
@@ -64,8 +66,20 @@ function SearchContent() {
   const [selectedFoodId, setSelectedFoodId] = useState<string | undefined>(undefined)
   const [showCustom, setShowCustom] = useState(false)
   const [editingFood, setEditingFood] = useState<Food | null>(null)
+  const [presets, setPresets] = useState<MealPreset[]>([])
+  const [usingPreset, setUsingPreset] = useState<MealPreset | null>(null)
+  const [editingPreset, setEditingPreset] = useState<MealPreset | null>(null)
+  const [showCreatePreset, setShowCreatePreset] = useState(false)
 
-  useEffect(() => { loadRecentFoods(); loadAllCustomFoods() }, [])
+  useEffect(() => { loadRecentFoods(); loadAllCustomFoods(); loadPresets() }, [])
+
+  async function loadPresets() {
+    const { data } = await supabase
+      .from('meal_presets')
+      .select('*, items:meal_preset_items(*, food:foods(*))')
+      .order('created_at', { ascending: false })
+    if (data) setPresets(data as MealPreset[])
+  }
 
   async function loadAllCustomFoods() {
     const { data } = await supabase
@@ -185,6 +199,44 @@ function SearchContent() {
           </div>
         )}
 
+        {/* Meal presets (shown when no query) */}
+        {!query && presets.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <UtensilsCrossed className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">餐點組合</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {presets.map(preset => {
+                const totalCal = preset.items.reduce((s, i) => s + Math.round(i.food.calories_per_serving * i.quantity), 0)
+                return (
+                  <div key={preset.id} className="flex items-center hover:bg-gray-50">
+                    <button
+                      onClick={() => setUsingPreset(preset)}
+                      className="flex-1 flex items-center px-4 py-3 gap-3 text-left min-w-0"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{preset.name}</p>
+                        <p className="text-xs text-gray-400">{preset.items.length} 種食材</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold text-gray-700">{totalCal}</p>
+                        <p className="text-xs text-gray-400">kcal</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditingPreset(preset) }}
+                      className="px-3 py-3 text-gray-300 hover:text-gray-500 shrink-0"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* All custom foods (shown when no query) */}
         {!query && allCustomFoods.length > 0 && (
           <div>
@@ -271,16 +323,26 @@ function SearchContent() {
           </div>
         )}
 
-        {/* Add custom food button */}
+        {/* Bottom action buttons */}
         {!query && (
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            onClick={() => setShowCustom(true)}
-          >
-            <Plus className="h-4 w-4" />
-            自行新增食物
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 gap-2"
+              onClick={() => setShowCustom(true)}
+            >
+              <Plus className="h-4 w-4" />
+              新增食物
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 gap-2"
+              onClick={() => setShowCreatePreset(true)}
+            >
+              <UtensilsCrossed className="h-4 w-4" />
+              建立組合
+            </Button>
+          </div>
         )}
       </div>
 
@@ -294,6 +356,37 @@ function SearchContent() {
           logDate={selectedDate}
           onClose={() => { setSelectedFood(null); setSelectedFoodId(undefined) }}
           onAdded={() => { router.back() }}
+        />
+      )}
+
+      {/* Use preset dialog */}
+      {usingPreset && profile && (
+        <UsePresetDialog
+          preset={usingPreset}
+          profileId={profile.id}
+          mealType={mealType}
+          logDate={selectedDate}
+          onClose={() => setUsingPreset(null)}
+          onAdded={() => router.back()}
+        />
+      )}
+
+      {/* Create preset dialog */}
+      {showCreatePreset && profile && (
+        <CreatePresetDialog
+          profileId={profile.id}
+          onClose={() => setShowCreatePreset(false)}
+          onSaved={() => { setShowCreatePreset(false); loadPresets() }}
+        />
+      )}
+
+      {/* Edit preset dialog */}
+      {editingPreset && profile && (
+        <CreatePresetDialog
+          profileId={profile.id}
+          preset={editingPreset}
+          onClose={() => setEditingPreset(null)}
+          onSaved={() => { setEditingPreset(null); loadPresets() }}
         />
       )}
 
