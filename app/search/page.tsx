@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AddFoodDialog } from '@/components/food/AddFoodDialog'
 import { CustomFoodDialog } from '@/components/food/CustomFoodDialog'
-import { Search, ArrowLeft, Plus, Clock, Star } from 'lucide-react'
+import { Search, ArrowLeft, Plus, Clock, Star, Pencil } from 'lucide-react'
+import { EditFoodDialog } from '@/components/food/EditFoodDialog'
 import type { Food, MealType, OFFProduct } from '@/types'
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -62,6 +63,7 @@ function SearchContent() {
   const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
   const [selectedFoodId, setSelectedFoodId] = useState<string | undefined>(undefined)
   const [showCustom, setShowCustom] = useState(false)
+  const [editingFood, setEditingFood] = useState<Food | null>(null)
 
   useEffect(() => { loadRecentFoods(); loadAllCustomFoods() }, [])
 
@@ -199,6 +201,7 @@ function SearchContent() {
                   calories={food.calories_per_serving}
                   servingUnit={food.serving_unit}
                   onClick={() => selectExistingFood(food)}
+                  onEdit={() => setEditingFood(food)}
                 />
               ))}
             </div>
@@ -225,6 +228,7 @@ function SearchContent() {
                   calories={food.calories_per_serving}
                   servingUnit={food.serving_unit}
                   onClick={() => selectExistingFood(food)}
+                  onEdit={() => setEditingFood(food)}
                 />
               ))}
             </div>
@@ -293,6 +297,15 @@ function SearchContent() {
         />
       )}
 
+      {/* Edit existing food dialog */}
+      {editingFood && (
+        <EditFoodDialog
+          food={editingFood}
+          onClose={() => setEditingFood(null)}
+          onSaved={() => { setEditingFood(null); loadAllCustomFoods() }}
+        />
+      )}
+
       {/* Custom food dialog */}
       {showCustom && profile && (
         <CustomFoodDialog
@@ -309,20 +322,31 @@ function SearchContent() {
   )
 }
 
-function FoodRow({ name, brand, calories, servingUnit, onClick }: {
-  name: string; brand?: string | null; calories: number; servingUnit: string; onClick: () => void
+function FoodRow({ name, brand, calories, servingUnit, onClick, onEdit }: {
+  name: string; brand?: string | null; calories: number; servingUnit: string
+  onClick: () => void; onEdit?: () => void
 }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center px-4 py-3 gap-3 hover:bg-gray-50 text-left">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
-        {brand && <p className="text-xs text-gray-400 truncate">{brand}</p>}
-      </div>
-      <div className="text-right shrink-0">
-        <p className="text-sm font-semibold text-gray-700">{Math.round(calories)}</p>
-        <p className="text-xs text-gray-400">kcal/{servingUnit}</p>
-      </div>
-    </button>
+    <div className="flex items-center hover:bg-gray-50">
+      <button onClick={onClick} className="flex-1 flex items-center px-4 py-3 gap-3 text-left min-w-0">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate">{name}</p>
+          {brand && <p className="text-xs text-gray-400 truncate">{brand}</p>}
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-sm font-semibold text-gray-700">{Math.round(calories)}</p>
+          <p className="text-xs text-gray-400">kcal/{servingUnit}</p>
+        </div>
+      </button>
+      {onEdit && (
+        <button
+          onClick={e => { e.stopPropagation(); onEdit() }}
+          className="px-3 py-3 text-gray-300 hover:text-gray-500 shrink-0"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      )}
+    </div>
   )
 }
 
