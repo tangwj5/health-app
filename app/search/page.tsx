@@ -54,6 +54,7 @@ function SearchContent() {
 
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
+  const abortRef = useRef<AbortController | null>(null)
   const { activeProfile, profiles, setProfiles } = useAppStore()
   const profile = activeProfile()
 
@@ -103,7 +104,6 @@ function SearchContent() {
       .select('*')
       .eq('source', 'custom')
       .order('created_at', { ascending: false })
-      .limit(30)
     if (data) setAllCustomFoods(data as Food[])
   }
 
@@ -125,8 +125,15 @@ function SearchContent() {
 
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); setCustomResults([]); return }
+
+    // Cancel any in-flight search request
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setSearching(true)
-    // Filter already-loaded custom foods client-side (avoids extra Supabase queries)
+
+    // Filter already-loaded custom foods client-side
     const lq = q.toLowerCase()
     const matched = allCustomFoods.filter(f =>
       f.name.toLowerCase().includes(lq) ||
@@ -134,13 +141,21 @@ function SearchContent() {
       (f.brand ?? '').toLowerCase().includes(lq)
     )
     setCustomResults(matched)
+
     try {
-      const offRes = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ products: [] }))
-      setResults(offRes.products || [])
+      const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
+      const offRes = await res.json()
+      if (!controller.signal.aborted) {
+        setResults(offRes.products || [])
+      }
     } catch {
-      setResults([])
+      if (!controller.signal.aborted) {
+        setResults([])
+      }
     } finally {
-      setSearching(false)
+      if (!controller.signal.aborted) {
+        setSearching(false)
+      }
     }
   }, [allCustomFoods])
 
