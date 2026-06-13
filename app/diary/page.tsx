@@ -41,8 +41,8 @@ export default function DiaryPage() {
 
   async function loadProfiles() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { router.push('/login'); return }
       const { data } = await supabase.from('profiles').select('*').order('slot')
       if (data && data.length > 0) {
         setProfiles(data as Profile[])
