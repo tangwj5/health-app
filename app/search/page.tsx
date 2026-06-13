@@ -21,9 +21,8 @@ const MEAL_LABELS: Record<MealType, string> = {
 }
 
 function parseOFFProduct(p: OFFProduct): Omit<Food, 'id' | 'created_by' | 'created_at'> {
-  const n = p.nutriments
+  const n = p.nutriments ?? {}
   const per100 = n['energy-kcal_100g'] != null
-  const cal = per100 ? (n['energy-kcal_100g'] || 0) : (n['energy-kcal_serving'] || 0)
   const servingG = p.serving_quantity || 100
   const factor = per100 ? servingG / 100 : 1
 
@@ -34,7 +33,7 @@ function parseOFFProduct(p: OFFProduct): Omit<Food, 'id' | 'created_by' | 'creat
     brand: p.brands || null,
     serving_size_g: servingG,
     serving_unit: p.serving_size || '份',
-    calories_per_serving: parseFloat(((per100 ? n['energy-kcal_100g']! : n['energy-kcal_serving'] || 0) * factor / (per100 ? 1 : 1)).toFixed(1)),
+    calories_per_serving: parseFloat(((per100 ? n['energy-kcal_100g'] || 0 : n['energy-kcal_serving'] || 0) * factor).toFixed(1)),
     protein_per_serving: parseFloat(((per100 ? n.proteins_100g || 0 : n.proteins_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
     carbs_per_serving: parseFloat(((per100 ? n.carbohydrates_100g || 0 : n.carbohydrates_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
     fat_per_serving: parseFloat(((per100 ? n.fat_100g || 0 : n.fat_serving || 0) * (per100 ? factor : 1)).toFixed(1)),
@@ -136,7 +135,7 @@ function SearchContent() {
     // Filter already-loaded custom foods client-side
     const lq = q.toLowerCase()
     const matched = allCustomFoods.filter(f =>
-      f.name.toLowerCase().includes(lq) ||
+      (f.name ?? '').toLowerCase().includes(lq) ||
       (f.name_zh ?? '').toLowerCase().includes(lq) ||
       (f.brand ?? '').toLowerCase().includes(lq)
     )
@@ -146,7 +145,8 @@ function SearchContent() {
       const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
       const offRes = await res.json()
       if (!controller.signal.aborted) {
-        setResults(offRes.products || [])
+        const valid = (offRes.products || []).filter((p: OFFProduct) => p.nutriments != null && p.product_name)
+        setResults(valid)
       }
     } catch {
       if (!controller.signal.aborted) {
@@ -339,7 +339,7 @@ function SearchContent() {
                   key={i}
                   name={(p as unknown as Record<string, string>)['product_name_zh-TW'] || p.product_name}
                   brand={p.brands}
-                  calories={p.nutriments['energy-kcal_serving'] || p.nutriments['energy-kcal_100g'] || 0}
+                  calories={(p.nutriments?.['energy-kcal_serving'] || p.nutriments?.['energy-kcal_100g'] || 0)}
                   servingUnit={p.serving_size || '份'}
                   onClick={() => selectOFFProduct(p)}
                 />
