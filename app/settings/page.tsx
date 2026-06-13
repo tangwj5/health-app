@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const { activeSlot, setActiveSlot, profiles, setProfiles, activeProfile } = useAppStore()
   const profile = activeProfile()
 
+  const [profilesState, setProfilesState] = useState<'loading' | 'ready' | 'no-auth'>('loading')
   const [form, setForm] = useState({
     display_name: '',
     birth_year: '',
@@ -45,6 +46,29 @@ export default function SettingsPage() {
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    async function loadProfiles() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) { setProfilesState('no-auth'); return }
+        const { data } = await supabase.from('profiles').select('*').order('slot')
+        if (data && data.length > 0) {
+          setProfiles(data as Profile[])
+          setProfilesState('ready')
+        } else {
+          setProfilesState('no-auth')
+        }
+      } catch {
+        setProfilesState('no-auth')
+      }
+    }
+    if (profiles.length > 0) {
+      setProfilesState('ready')
+    } else {
+      loadProfiles()
+    }
+  }, [])
 
   useEffect(() => {
     if (profile) {
@@ -96,7 +120,27 @@ export default function SettingsPage() {
     router.push('/login')
   }
 
-  if (!profile) return null
+  if (profilesState === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20">
+        <div className="bg-white border-b sticky top-0 z-10">
+          <div className="max-w-lg mx-auto px-4 py-3">
+            <div className="h-9 bg-gray-100 rounded-full animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (profilesState === 'no-auth' || !profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20 flex items-center justify-center">
+        <a href="/login" className="py-2 px-6 bg-green-500 text-white rounded-full text-sm font-medium">
+          請先登入
+        </a>
+      </div>
+    )
+  }
 
   const weightKg = parseFloat(form.weight_kg) || 65
   const bmr = calcBMR(profile.gender, weightKg, parseFloat(form.height_cm) || 170, parseInt(form.birth_year) || 1990)
@@ -107,7 +151,9 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-gray-50 pb-24">
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3">
-          <PersonSwitcher profiles={profiles} activeSlot={activeSlot} onSwitch={setActiveSlot} />
+          {profiles.length > 0 && (
+            <PersonSwitcher profiles={profiles} activeSlot={activeSlot} onSwitch={setActiveSlot} />
+          )}
         </div>
       </div>
 
