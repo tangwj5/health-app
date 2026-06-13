@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store'
@@ -52,7 +52,8 @@ function SearchContent() {
   const mealType = (params.get('meal') || 'breakfast') as MealType
   const selectedDate = params.get('date') || ''
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const { activeProfile, profiles, setProfiles } = useAppStore()
   const profile = activeProfile()
 
@@ -125,32 +126,23 @@ function SearchContent() {
   const doSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); setCustomResults([]); return }
     setSearching(true)
+    // Filter already-loaded custom foods client-side (avoids extra Supabase queries)
+    const lq = q.toLowerCase()
+    const matched = allCustomFoods.filter(f =>
+      f.name.toLowerCase().includes(lq) ||
+      (f.name_zh ?? '').toLowerCase().includes(lq) ||
+      (f.brand ?? '').toLowerCase().includes(lq)
+    )
+    setCustomResults(matched)
     try {
-      const [offRes, customData] = await Promise.all([
-        fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ products: [] })),
-        (async () => {
-          const [r1, r2, r3] = await Promise.all([
-            supabase.from('foods').select('*').eq('source', 'custom').ilike('name', `%${q}%`).limit(10),
-            supabase.from('foods').select('*').eq('source', 'custom').ilike('brand', `%${q}%`).limit(10),
-            supabase.from('foods').select('*').eq('source', 'custom').ilike('name_zh', `%${q}%`).limit(10),
-          ])
-          const seen = new Set<string>()
-          return [...(r1.data || []), ...(r2.data || []), ...(r3.data || [])].filter(f => {
-            if (seen.has(f.id)) return false
-            seen.add(f.id)
-            return true
-          }).slice(0, 10)
-        })(),
-      ])
+      const offRes = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()).catch(() => ({ products: [] }))
       setResults(offRes.products || [])
-      setCustomResults((customData as Food[]) || [])
     } catch {
       setResults([])
-      setCustomResults([])
     } finally {
       setSearching(false)
     }
-  }, [supabase])
+  }, [allCustomFoods])
 
   useEffect(() => {
     const timer = setTimeout(() => doSearch(query), 500)
