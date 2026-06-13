@@ -127,7 +127,7 @@ function SearchContent() {
     setSearching(true)
     const [offRes, { data: customFoods }] = await Promise.all([
       fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()),
-      supabase.from('foods').select('*').eq('source', 'custom').ilike('name', `%${q}%`).limit(10),
+      supabase.from('foods').select('*').eq('source', 'custom').or(`name.ilike.%${q}%,brand.ilike.%${q}%,name_zh.ilike.%${q}%`).limit(10),
     ])
     setResults(offRes.products || [])
     setCustomResults((customFoods as Food[]) || [])
