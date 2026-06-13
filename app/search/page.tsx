@@ -127,7 +127,19 @@ function SearchContent() {
     setSearching(true)
     const [offRes, { data: customFoods }] = await Promise.all([
       fetch(`/api/food-search?q=${encodeURIComponent(q)}`).then(r => r.json()),
-      supabase.from('foods').select('*').eq('source', 'custom').or(`name.ilike.%${q}%,brand.ilike.%${q}%,name_zh.ilike.%${q}%`).limit(10),
+      Promise.all([
+        supabase.from('foods').select('*').eq('source', 'custom').ilike('name', `%${q}%`).limit(10),
+        supabase.from('foods').select('*').eq('source', 'custom').ilike('brand', `%${q}%`).limit(10),
+        supabase.from('foods').select('*').eq('source', 'custom').ilike('name_zh', `%${q}%`).limit(10),
+      ]).then(([r1, r2, r3]) => {
+        const seen = new Set<string>()
+        const merged = [...(r1.data || []), ...(r2.data || []), ...(r3.data || [])].filter(f => {
+          if (seen.has(f.id)) return false
+          seen.add(f.id)
+          return true
+        }).slice(0, 10)
+        return { data: merged }
+      }),
     ])
     setResults(offRes.products || [])
     setCustomResults((customFoods as Food[]) || [])
