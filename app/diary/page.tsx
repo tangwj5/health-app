@@ -28,7 +28,7 @@ export default function DiaryPage() {
   const { activeSlot, setActiveSlot, profiles, setProfiles, selectedDate, setSelectedDate, activeProfile } = useAppStore()
   const [entries, setEntries] = useState<MealEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingProfiles, setLoadingProfiles] = useState(profiles.length === 0)
+  const [profilesState, setProfilesState] = useState<'loading' | 'ready' | 'no-auth'>('loading')
   const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null)
 
   useEffect(() => {
@@ -42,17 +42,16 @@ export default function DiaryPage() {
   async function loadProfiles() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { router.push('/login'); return }
+      if (!session) { setProfilesState('no-auth'); return }
       const { data } = await supabase.from('profiles').select('*').order('slot')
       if (data && data.length > 0) {
         setProfiles(data as Profile[])
+        setProfilesState('ready')
       } else {
-        router.push('/setup')
+        setProfilesState('no-auth')
       }
     } catch {
-      router.push('/login')
-    } finally {
-      setLoadingProfiles(false)
+      setProfilesState('no-auth')
     }
   }
 
@@ -106,8 +105,12 @@ export default function DiaryPage() {
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3">
-          {loadingProfiles ? (
+          {profilesState === 'loading' ? (
             <div className="h-9 bg-gray-100 rounded-full animate-pulse" />
+          ) : profilesState === 'no-auth' ? (
+            <a href="/login" className="block text-center py-1.5 px-4 bg-green-500 text-white rounded-full text-sm font-medium">
+              請先登入
+            </a>
           ) : (
             <PersonSwitcher
               profiles={profiles}
