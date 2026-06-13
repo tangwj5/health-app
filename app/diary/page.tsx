@@ -28,6 +28,7 @@ export default function DiaryPage() {
   const { activeSlot, setActiveSlot, profiles, setProfiles, selectedDate, setSelectedDate, activeProfile } = useAppStore()
   const [entries, setEntries] = useState<MealEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingProfiles, setLoadingProfiles] = useState(profiles.length === 0)
   const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null)
 
   useEffect(() => {
@@ -39,16 +40,19 @@ export default function DiaryPage() {
   }, [activeSlot, selectedDate, profiles])
 
   async function loadProfiles() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push('/login'); return }
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('slot')
-    if (data && data.length > 0) {
-      setProfiles(data as Profile[])
-    } else {
-      router.push('/setup')
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+      const { data } = await supabase.from('profiles').select('*').order('slot')
+      if (data && data.length > 0) {
+        setProfiles(data as Profile[])
+      } else {
+        router.push('/setup')
+      }
+    } catch {
+      router.push('/login')
+    } finally {
+      setLoadingProfiles(false)
     }
   }
 
@@ -102,11 +106,15 @@ export default function DiaryPage() {
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3">
-          <PersonSwitcher
-            profiles={profiles}
-            activeSlot={activeSlot}
-            onSwitch={setActiveSlot}
-          />
+          {loadingProfiles ? (
+            <div className="h-9 bg-gray-100 rounded-full animate-pulse" />
+          ) : (
+            <PersonSwitcher
+              profiles={profiles}
+              activeSlot={activeSlot}
+              onSwitch={setActiveSlot}
+            />
+          )}
           {/* Date picker */}
           <div className="flex items-center justify-between mt-3">
             <button onClick={() => setSelectedDate(format(subDays(dateObj, 1), 'yyyy-MM-dd'))}
