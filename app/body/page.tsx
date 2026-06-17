@@ -226,7 +226,7 @@ export default function BodyPage() {
           />
         )}
         {tab === '飲食連動' && (
-          <DietTab profile={profile} data={mealCorrelation} />
+          <DietTab profile={profile} data={mealCorrelation} metrics={metrics} />
         )}
         {tab === '歷史記錄' && (
           <HistoryTab
@@ -529,10 +529,47 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
 interface DietTabProps {
   profile: Profile
   data: Array<{date: string, calories: number, protein: number, weight: number | null}>
+  metrics: BodyMetric[]
 }
 
-function DietTab({ profile, data }: DietTabProps) {
+function DietTab({ profile, data, metrics }: DietTabProps) {
   const goal = profile.goal
+
+  // ── last week range ──
+  const today = new Date()
+  const dow = today.getDay()
+  const daysToLastMon = dow === 0 ? 13 : dow + 6
+  const lastMon = new Date(today); lastMon.setDate(today.getDate() - daysToLastMon)
+  const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6)
+  const lastMonStr = format(lastMon, 'yyyy-MM-dd')
+  const lastSunStr = format(lastSun, 'yyyy-MM-dd')
+
+  const lastWeekData = data.filter(d => d.date >= lastMonStr && d.date <= lastSunStr)
+  const lwWithCal = lastWeekData.filter(d => d.calories > 0)
+  const lwWithPro = lastWeekData.filter(d => d.protein > 0)
+  const lwAvgCal = lwWithCal.length ? Math.round(lwWithCal.reduce((s, d) => s + d.calories, 0) / lwWithCal.length) : null
+  const lwAvgPro = lwWithPro.length ? parseFloat((lwWithPro.reduce((s, d) => s + d.protein, 0) / lwWithPro.length).toFixed(1)) : null
+
+  const lwMetrics = metrics
+    .filter(m => { const d = format(parseISO(m.recorded_at), 'yyyy-MM-dd'); return d >= lastMonStr && d <= lastSunStr && m.is_first_of_day })
+    .sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
+
+  function deltaOf(key: 'weight_kg' | 'muscle_kg' | 'body_fat_pct') {
+    const vals = lwMetrics.map(m => m[key]).filter((v): v is number => v != null)
+    if (vals.length < 2) return null
+    return parseFloat((vals[vals.length - 1] - vals[0]).toFixed(2))
+  }
+  const weightDelta  = deltaOf('weight_kg')
+  const muscleDelta  = deltaOf('muscle_kg')
+  const fatDelta     = deltaOf('body_fat_pct')
+  const weightStart  = lwMetrics.find(m => m.weight_kg != null)?.weight_kg ?? null
+  const weightEnd    = [...lwMetrics].reverse().find(m => m.weight_kg != null)?.weight_kg ?? null
+  const muscleStart  = lwMetrics.find(m => m.muscle_kg != null)?.muscle_kg ?? null
+  const muscleEnd    = [...lwMetrics].reverse().find(m => m.muscle_kg != null)?.muscle_kg ?? null
+  const fatStart     = lwMetrics.find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
+  const fatEnd       = [...lwMetrics].reverse().find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
+
+  const hasLastWeek = lwAvgCal != null || lwAvgPro != null
 
   const recent30 = data.slice(-30)
   const avgCal = recent30.length
@@ -573,6 +610,66 @@ function DietTab({ profile, data }: DietTabProps) {
           </div>
         </div>
       </div>
+
+      {/* Last week analysis */}
+      {hasLastWeek && (
+        <div className="bg-white rounded-2xl border p-4">
+          <p className="text-sm font-semibold text-gray-700 mb-1">上週分析</p>
+          <p className="text-xs text-gray-400 mb-3">{format(lastMon, 'M/d')} – {format(lastSun, 'M/d')}</p>
+          <div className="space-y-3">
+            {lwAvgCal != null && (
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-orange-400 mt-1.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 mb-0.5">平均熱量 <span className="font-semibold text-orange-600">{lwAvgCal} kcal</span></p>
+                  {weightDelta != null ? (
+                    <p className="text-xs text-gray-700">
+                      體重 {weightStart?.toFixed(1)} → {weightEnd?.toFixed(1)} kg
+                      <span className={`ml-1.5 font-semibold ${weightDelta < 0 ? 'text-green-600' : weightDelta > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                        ({weightDelta > 0 ? '+' : ''}{weightDelta} kg)
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400">體重資料不足（需至少週初、週末各一筆基準量測）</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {lwAvgPro != null && (
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 mb-0.5">平均蛋白質 <span className="font-semibold text-blue-600">{lwAvgPro}g</span></p>
+                  {muscleDelta != null ? (
+                    <p className="text-xs text-gray-700">
+                      肌肉量 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
+                      <span className={`ml-1.5 font-semibold ${muscleDelta > 0 ? 'text-blue-600' : muscleDelta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                        ({muscleDelta > 0 ? '+' : ''}{muscleDelta} kg)
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400">肌肉資料不足</p>
+                  )}
+                </div>
+              </div>
+            )}
+            {fatDelta != null && (
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-red-400 mt-1.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 mb-0.5">體脂肪</p>
+                  <p className="text-xs text-gray-700">
+                    {fatStart?.toFixed(1)} → {fatEnd?.toFixed(1)} %
+                    <span className={`ml-1.5 font-semibold ${fatDelta < 0 ? 'text-green-600' : fatDelta > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                      ({fatDelta > 0 ? '+' : ''}{fatDelta}%)
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Daily breakdown */}
       <div className="bg-white rounded-2xl border p-4">
