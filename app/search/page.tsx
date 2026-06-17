@@ -209,9 +209,27 @@ function SearchContent() {
               />
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-gray-400">新增到</span>
-            <Badge variant="secondary" className="text-xs">{MEAL_LABELS[mealType]}</Badge>
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">新增到</span>
+              <Badge variant="secondary" className="text-xs">{MEAL_LABELS[mealType]}</Badge>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setShowCustom(true)}
+                className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-full px-2.5 py-1 hover:bg-gray-50"
+              >
+                <Plus className="h-3 w-3" />
+                新增食物
+              </button>
+              <button
+                onClick={() => setShowCreatePreset(true)}
+                className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-full px-2.5 py-1 hover:bg-gray-50"
+              >
+                <UtensilsCrossed className="h-3 w-3" />
+                建立組合
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -363,27 +381,6 @@ function SearchContent() {
           </div>
         )}
 
-        {/* Bottom action buttons */}
-        {!query && (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1 gap-2"
-              onClick={() => setShowCustom(true)}
-            >
-              <Plus className="h-4 w-4" />
-              新增食物
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1 gap-2"
-              onClick={() => setShowCreatePreset(true)}
-            >
-              <UtensilsCrossed className="h-4 w-4" />
-              建立組合
-            </Button>
-          </div>
-        )}
       </div>
 
       {/* Add food dialog */}
