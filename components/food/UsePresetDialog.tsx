@@ -19,14 +19,31 @@ interface Props {
   onAdded: () => void
 }
 
+const RATIOS = [
+  { label: '全部', value: 1 },
+  { label: '3/4', value: 0.75 },
+  { label: '1/2', value: 0.5 },
+  { label: '1/3', value: 1 / 3 },
+  { label: '1/4', value: 0.25 },
+]
+
 export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose, onAdded }: Props) {
   const supabase = createClient()
   const [quantities, setQuantities] = useState<Record<string, number>>(
     Object.fromEntries(preset.items.map(item => [item.id, item.quantity]))
   )
+  const [ratio, setRatio] = useState(1)
   const [loading, setLoading] = useState(false)
 
+  function applyRatio(r: number) {
+    setRatio(r)
+    setQuantities(Object.fromEntries(
+      preset.items.map(item => [item.id, Math.round(item.quantity * r * 10) / 10])
+    ))
+  }
+
   function setQty(itemId: string, qty: number) {
+    setRatio(-1) // custom
     setQuantities(prev => ({ ...prev, [itemId]: Math.max(0, parseFloat(qty.toFixed(1))) }))
   }
 
@@ -75,6 +92,26 @@ export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose,
           <DialogTitle>{preset.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
+          {/* Ratio selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500 shrink-0">吃多少？</span>
+            <div className="flex gap-1 flex-1">
+              {RATIOS.map(r => (
+                <button
+                  key={r.label}
+                  onClick={() => applyRatio(r.value)}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    ratio === r.value
+                      ? 'bg-green-500 text-white border-green-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {preset.items.map(item => {
             const qty = quantities[item.id] ?? item.quantity
             const cals = Math.round(item.food.calories_per_serving * qty)
