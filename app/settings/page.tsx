@@ -44,6 +44,7 @@ export default function SettingsPage() {
     activity_level: 'moderate' as ActivityLevel,
     goal: 'maintain' as GoalType,
   })
+  const [autoWeight, setAutoWeight] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -69,6 +70,32 @@ export default function SettingsPage() {
       loadProfiles()
     }
   }, [])
+
+  useEffect(() => {
+    async function loadLastWeekAvgWeight() {
+      if (!profile) return
+      setAutoWeight(null)
+      const now = new Date()
+      const dayOfWeek = now.getDay() // 0=Sun
+      const diffToLastMon = dayOfWeek === 0 ? 13 : dayOfWeek + 6
+      const lastMon = new Date(now); lastMon.setDate(now.getDate() - diffToLastMon); lastMon.setHours(0,0,0,0)
+      const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6); lastSun.setHours(23,59,59,999)
+      const { data } = await supabase
+        .from('body_metrics')
+        .select('weight_kg')
+        .eq('profile_id', profile.id)
+        .eq('is_first_of_day', true)
+        .gte('recorded_at', lastMon.toISOString())
+        .lte('recorded_at', lastSun.toISOString())
+      const vals = (data || []).map((r: Record<string, unknown>) => Number(r.weight_kg)).filter(v => !isNaN(v) && v > 0)
+      if (vals.length > 0) {
+        const avg = parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1))
+        setAutoWeight(avg)
+        setForm(p => ({ ...p, weight_kg: String(avg) }))
+      }
+    }
+    if (profile) loadLastWeekAvgWeight()
+  }, [activeSlot, profiles])
 
   useEffect(() => {
     if (profile) {
@@ -178,8 +205,23 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label>目前體重 (kg)（用於計算目標）</Label>
-              <Input type="number" value={form.weight_kg} onChange={e => setForm(p => ({ ...p, weight_kg: e.target.value }))} step="0.1" />
+              <div className="flex items-center justify-between">
+                <Label>目前體重 (kg)</Label>
+                {autoWeight != null && (
+                  <span className="text-xs text-green-600 bg-green-50 rounded-full px-2 py-0.5">上週均值自動帶入</span>
+                )}
+              </div>
+              <Input
+                type="number"
+                value={form.weight_kg}
+                onChange={e => { setAutoWeight(null); setForm(p => ({ ...p, weight_kg: e.target.value })) }}
+                step="0.1"
+                readOnly={autoWeight != null}
+                className={autoWeight != null ? 'bg-gray-50 text-gray-500' : ''}
+              />
+              {autoWeight == null && (
+                <p className="text-xs text-gray-400">到「體組成」頁面記錄後，此欄將自動帶入上週均值</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>活動量</Label>

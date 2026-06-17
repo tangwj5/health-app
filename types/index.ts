@@ -16,6 +16,21 @@ export interface Profile {
   weight_kg: number
   calorie_target: number
   protein_target: number
+  target_weight_kg: number | null
+  weekly_target_rate: number | null
+  created_at: string
+}
+
+export interface BodyMetric {
+  id: string
+  profile_id: string
+  recorded_at: string
+  weight_kg: number | null
+  body_fat_pct: number | null
+  muscle_kg: number | null
+  visceral_fat: number | null
+  is_first_of_day: boolean
+  note: string | null
   created_at: string
 }
 
