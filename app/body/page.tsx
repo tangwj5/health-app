@@ -534,11 +534,12 @@ interface DietTabProps {
 
 function DietTab({ profile, data, metrics }: DietTabProps) {
   const goal = profile.goal
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = last week, 1 = two weeks ago, …
 
-  // ── last week range ──
+  // ── selected week range ──
   const today = new Date()
   const dow = today.getDay()
-  const daysToLastMon = dow === 0 ? 13 : dow + 6
+  const daysToLastMon = (dow === 0 ? 13 : dow + 6) + weekOffset * 7
   const lastMon = new Date(today); lastMon.setDate(today.getDate() - daysToLastMon)
   const lastSun = new Date(lastMon); lastSun.setDate(lastMon.getDate() + 6)
   const lastMonStr = format(lastMon, 'yyyy-MM-dd')
@@ -622,8 +623,23 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
       {/* Last week analysis */}
       {hasLastWeek && (
         <div className="bg-white rounded-2xl border p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-1">上週分析</p>
-          <p className="text-xs text-gray-400 mb-3">{format(lastMon, 'M/d')} – {format(lastSun, 'M/d')}</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-700">
+              {weekOffset === 0 ? '上週分析' : `${weekOffset + 1}週前分析`}
+            </p>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">{format(lastMon, 'M/d')} – {format(lastSun, 'M/d')}</span>
+              <button
+                onClick={() => setWeekOffset(w => w + 1)}
+                className="w-6 h-6 rounded-full border border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600 flex items-center justify-center text-xs"
+              >‹</button>
+              <button
+                onClick={() => setWeekOffset(w => w - 1)}
+                disabled={weekOffset === 0}
+                className="w-6 h-6 rounded-full border border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600 flex items-center justify-center text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              >›</button>
+            </div>
+          </div>
           <div className="space-y-3">
             {/* 熱量 → 體重 + 體脂 */}
             {lwAvgCal != null && (
