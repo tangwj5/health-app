@@ -569,6 +569,14 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
   const fatStart     = lwMetrics.find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
   const fatEnd       = [...lwMetrics].reverse().find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
 
+  // calorie deficit vs target (positive = ate less, i.e. true deficit)
+  const calDeficit = lwAvgCal != null ? profile.calorie_target - lwAvgCal : null
+
+  // protein per kg body weight (using last week avg first-of-day weight)
+  const lwWeights = lwMetrics.map(m => m.weight_kg).filter((v): v is number => v != null)
+  const lwAvgWeight = lwWeights.length ? parseFloat((lwWeights.reduce((a, b) => a + b, 0) / lwWeights.length).toFixed(1)) : null
+  const proteinPerKg = lwAvgPro != null && lwAvgWeight != null ? parseFloat((lwAvgPro / lwAvgWeight).toFixed(2)) : null
+
   const hasLastWeek = lwAvgCal != null || lwAvgPro != null
 
   const recent30 = data.slice(-30)
@@ -617,11 +625,19 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
           <p className="text-sm font-semibold text-gray-700 mb-1">上週分析</p>
           <p className="text-xs text-gray-400 mb-3">{format(lastMon, 'M/d')} – {format(lastSun, 'M/d')}</p>
           <div className="space-y-3">
+            {/* 熱量 → 體重 + 體脂 */}
             {lwAvgCal != null && (
               <div className="flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-orange-400 mt-1.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-0.5">平均熱量 <span className="font-semibold text-orange-600">{lwAvgCal} kcal</span></p>
+                <div className="flex-1 space-y-0.5">
+                  <p className="text-xs text-gray-500">
+                    平均熱量 <span className="font-semibold text-orange-600">{lwAvgCal} kcal</span>
+                    {calDeficit != null && (
+                      <span className={`ml-2 font-semibold ${calDeficit > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        （{calDeficit > 0 ? '赤字' : '盈餘'} {Math.abs(calDeficit)} kcal）
+                      </span>
+                    )}
+                  </p>
                   {weightDelta != null ? (
                     <p className="text-xs text-gray-700">
                       體重 {weightStart?.toFixed(1)} → {weightEnd?.toFixed(1)} kg
@@ -632,14 +648,28 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
                   ) : (
                     <p className="text-xs text-gray-400">體重資料不足（需至少週初、週末各一筆基準量測）</p>
                   )}
+                  {fatDelta != null && (
+                    <p className="text-xs text-gray-700">
+                      體脂 {fatStart?.toFixed(1)} → {fatEnd?.toFixed(1)} %
+                      <span className={`ml-1.5 font-semibold ${fatDelta < 0 ? 'text-green-600' : fatDelta > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                        ({fatDelta > 0 ? '+' : ''}{fatDelta}%)
+                      </span>
+                    </p>
+                  )}
                 </div>
               </div>
             )}
+            {/* 蛋白質 → 肌肉 */}
             {lwAvgPro != null && (
               <div className="flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-0.5">平均蛋白質 <span className="font-semibold text-blue-600">{lwAvgPro}g</span></p>
+                <div className="flex-1 space-y-0.5">
+                  <p className="text-xs text-gray-500">
+                    平均蛋白質 <span className="font-semibold text-blue-600">{lwAvgPro}g</span>
+                    {proteinPerKg != null && (
+                      <span className="ml-2 text-gray-400">≈ 體重 <span className="font-semibold text-blue-500">{proteinPerKg}倍</span>（{proteinPerKg} g/kg）</span>
+                    )}
+                  </p>
                   {muscleDelta != null ? (
                     <p className="text-xs text-gray-700">
                       肌肉量 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
@@ -650,20 +680,6 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
                   ) : (
                     <p className="text-xs text-gray-400">肌肉資料不足</p>
                   )}
-                </div>
-              </div>
-            )}
-            {fatDelta != null && (
-              <div className="flex items-start gap-3">
-                <div className="w-2 h-2 rounded-full bg-red-400 mt-1.5 shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-0.5">體脂肪</p>
-                  <p className="text-xs text-gray-700">
-                    {fatStart?.toFixed(1)} → {fatEnd?.toFixed(1)} %
-                    <span className={`ml-1.5 font-semibold ${fatDelta < 0 ? 'text-green-600' : fatDelta > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                      ({fatDelta > 0 ? '+' : ''}{fatDelta}%)
-                    </span>
-                  </p>
                 </div>
               </div>
             )}
