@@ -295,8 +295,13 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
     ? Math.abs(distToTarget / fourWeekRate)
     : null
 
-  // SVG line chart
-  const chartData = weeklyStats.map(w => ({ label: w.week, value: w.avg[activeMetric] }))
+  // SVG line chart — every is_first_of_day record
+  const chartData = metrics
+    .filter(m => m.is_first_of_day && m[activeMetric] != null)
+    .map(m => ({
+      label: format(parseISO(m.recorded_at), 'M/d'),
+      value: m[activeMetric] as number,
+    }))
   const chartValues = chartData.map(d => d.value).filter((v): v is number => v != null)
   const minV = chartValues.length ? Math.min(...chartValues) : 0
   const maxV = chartValues.length ? Math.max(...chartValues) : 1
@@ -509,7 +514,7 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
           </div>
         )}
         <p className="text-xs text-gray-400 text-center mt-1">
-          {metaDef.label}（{metaDef.unit || '單位'}）· 每週基準值平均
+          {metaDef.label}（{metaDef.unit || '單位'}）· 每日第一筆量測值
         </p>
       </div>
     </div>
