@@ -344,7 +344,7 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
   return (
     <div className="space-y-4">
       {/* Goal progress card */}
-      {(targetWeight != null || editingTarget) && !editingTarget && (
+      {targetWeight != null && !editingTarget && (
         <div className="bg-white rounded-2xl border p-4">
           <div className="flex items-start justify-between mb-2">
             <p className="text-sm font-semibold text-gray-700">體重目標</p>
