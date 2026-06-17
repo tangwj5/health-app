@@ -244,6 +244,7 @@ export default function BodyPage() {
         <BodyMetricDialog
           profileId={profile.id}
           initial={editingMetric ?? undefined}
+          lastValues={editingMetric ? undefined : (metrics.length ? metrics[metrics.length - 1] : undefined)}
           onClose={() => { setShowDialog(false); setEditingMetric(null) }}
           onSaved={() => { setShowDialog(false); setEditingMetric(null); loadMetrics() }}
         />
@@ -481,16 +482,18 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
           ))}
         </div>
 
-        {points.length > 1 ? (
+        {points.length > 0 ? (
           <div className="w-full overflow-x-auto">
             <svg viewBox={`0 0 ${CHART_W} ${CHART_H + 20}`} className="w-full" style={{ minWidth: '240px' }}>
-              <polyline
-                points={points.map(p => `${p.x},${p.y}`).join(' ')}
-                fill="none"
-                stroke={metaDef.color}
-                strokeWidth="2"
-                strokeLinejoin="round"
-              />
+              {points.length > 1 && (
+                <polyline
+                  points={points.map(p => `${p.x},${p.y}`).join(' ')}
+                  fill="none"
+                  stroke={metaDef.color}
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              )}
               {points.map((p, i) => (
                 <g key={i}>
                   <circle cx={p.x} cy={p.y} r="3" fill={metaDef.color} />
@@ -510,7 +513,7 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
           </div>
         ) : (
           <div className="text-center py-8 text-sm text-gray-400">
-            {chartValues.length === 0 ? '尚無資料' : '資料點不足以繪圖'}
+            尚無基準量測資料（記錄時請勾選「今日基準」）
           </div>
         )}
         <p className="text-xs text-gray-400 text-center mt-1">

@@ -11,6 +11,7 @@ import type { BodyMetric } from '@/types'
 interface Props {
   profileId: string
   initial?: BodyMetric
+  lastValues?: BodyMetric
   onClose: () => void
   onSaved: () => void
 }
@@ -25,14 +26,15 @@ function nowLocalDatetimeStr() {
   return toLocalDatetimeStr(new Date().toISOString())
 }
 
-export function BodyMetricDialog({ profileId, initial, onClose, onSaved }: Props) {
+export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSaved }: Props) {
   const supabase = createClient()
+  const prev = initial ? undefined : lastValues
   const [form, setForm] = useState({
     recorded_at: initial ? toLocalDatetimeStr(initial.recorded_at) : nowLocalDatetimeStr(),
-    weight_kg: initial?.weight_kg != null ? String(initial.weight_kg) : '',
-    body_fat_pct: initial?.body_fat_pct != null ? String(initial.body_fat_pct) : '',
-    muscle_kg: initial?.muscle_kg != null ? String(initial.muscle_kg) : '',
-    visceral_fat: initial?.visceral_fat != null ? String(initial.visceral_fat) : '',
+    weight_kg: initial?.weight_kg != null ? String(initial.weight_kg) : (prev?.weight_kg != null ? String(prev.weight_kg) : ''),
+    body_fat_pct: initial?.body_fat_pct != null ? String(initial.body_fat_pct) : (prev?.body_fat_pct != null ? String(prev.body_fat_pct) : ''),
+    muscle_kg: initial?.muscle_kg != null ? String(initial.muscle_kg) : (prev?.muscle_kg != null ? String(prev.muscle_kg) : ''),
+    visceral_fat: initial?.visceral_fat != null ? String(initial.visceral_fat) : (prev?.visceral_fat != null ? String(prev.visceral_fat) : ''),
     is_first_of_day: initial?.is_first_of_day ?? false,
     note: initial?.note ?? '',
   })
