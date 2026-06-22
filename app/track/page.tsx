@@ -7,7 +7,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { format, parseISO, subDays, differenceInDays } from 'date-fns'
+import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
 import { Plus, Check, X, Search } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
@@ -98,8 +98,13 @@ export default function TrackPage() {
 
 function HabitTab({ profile }: { profile: Profile }) {
   const supabase = createClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const todayDate = new Date()
+  const today = format(todayDate, 'yyyy-MM-dd')
   const GRID_DAYS = 35
+  // always start grid on Monday (Mon=0 in Mon-first week)
+  const dow = (todayDate.getDay() + 6) % 7
+  const thisMonday = subDays(todayDate, dow)
+  const gridStart = subDays(thisMonday, 28) // 4 complete weeks before this Monday
 
   const [habits, setHabits] = useState<Habit[]>([])
   const [logs, setLogs] = useState<HabitLog[]>([])
@@ -121,7 +126,7 @@ function HabitTab({ profile }: { profile: Profile }) {
   }, [profile.id])
 
   const loadLogs = useCallback(async () => {
-    const since = format(subDays(new Date(), GRID_DAYS - 1), 'yyyy-MM-dd')
+    const since = format(gridStart, 'yyyy-MM-dd')
     const { data } = await supabase
       .from('habit_logs')
       .select('*')
@@ -173,8 +178,9 @@ function HabitTab({ profile }: { profile: Profile }) {
     setDeleteConfirm(null)
   }
 
+  // 5 weeks × 7 days, always starting from Monday
   const gridDays = Array.from({ length: GRID_DAYS }, (_, i) =>
-    format(subDays(new Date(), GRID_DAYS - 1 - i), 'yyyy-MM-dd')
+    format(addDays(gridStart, i), 'yyyy-MM-dd')
   )
 
   const DOW = ['一', '二', '三', '四', '五', '六', '日']
@@ -254,11 +260,12 @@ function HabitTab({ profile }: { profile: Profile }) {
         <div className="space-y-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">近 {GRID_DAYS} 天統計</p>
           {habits.map(h => {
-            const doneDays = gridDays.filter(d => logSet.has(`${h.id}:${d}`))
-            const rate = Math.round((doneDays.length / GRID_DAYS) * 100)
+            const pastDays = gridDays.filter(d => d <= today)
+            const doneDays = pastDays.filter(d => logSet.has(`${h.id}:${d}`))
+            const rate = pastDays.length ? Math.round((doneDays.length / pastDays.length) * 100) : 0
             let streak = 0
             for (let i = 0; i < GRID_DAYS; i++) {
-              const d = format(subDays(new Date(), i), 'yyyy-MM-dd')
+              const d = format(subDays(todayDate, i), 'yyyy-MM-dd')
               if (logSet.has(`${h.id}:${d}`)) streak++
               else break
             }
@@ -284,11 +291,10 @@ function HabitTab({ profile }: { profile: Profile }) {
                         key={d}
                         title={d}
                         className={`h-5 rounded-sm ${
-                          logSet.has(`${h.id}:${d}`)
-                            ? 'bg-green-500'
-                            : d === today
-                            ? 'bg-gray-200 ring-1 ring-gray-400'
-                            : 'bg-gray-100'
+                          d > today ? 'bg-transparent' :
+                          logSet.has(`${h.id}:${d}`) ? 'bg-green-500' :
+                          d === today ? 'bg-gray-200 ring-1 ring-gray-400' :
+                          'bg-gray-100'
                         }`}
                       />
                     ))}
