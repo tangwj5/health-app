@@ -8,7 +8,7 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
-import { Plus, Check, X, Search } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
@@ -324,6 +324,11 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [query, setQuery] = useState('')
   const [completing, setCompleting] = useState<Set<string>>(new Set())
   const [justDone, setJustDone] = useState<Set<string>>(new Set())
+  const [confirmingItem, setConfirmingItem] = useState<string | null>(null)
+  const [confirmNote, setConfirmNote] = useState('')
+  const [historyItem, setHistoryItem] = useState<string | null>(null)
+  const [itemHistory, setItemHistory] = useState<Record<string, TrackerLog[]>>({})
+  const [loadingHistory, setLoadingHistory] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '' })
   const [adding, setAdding] = useState(false)
@@ -349,22 +354,41 @@ function TrackerTab({ profile }: { profile: Profile }) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  async function completeItem(id: string) {
+  async function completeItem(id: string, note: string) {
     setCompleting(s => new Set(s).add(id))
+    setConfirmingItem(null)
+    setConfirmNote('')
     const { data } = await supabase.from('tracker_logs').insert({
       item_id: id,
       profile_id: profile.id,
       completed_at: new Date().toISOString(),
+      note: note.trim() || null,
     }).select().single()
     if (data) {
-      const now = new Date()
       setItems(prev => prev.map(item =>
         item.id === id ? { ...item, lastCompletedAt: (data as TrackerLog).completed_at, daysSince: 0 } : item
       ))
+      // prepend to cached history if already loaded
+      setItemHistory(prev => prev[id] ? { ...prev, [id]: [data as TrackerLog, ...prev[id]] } : prev)
       setJustDone(s => new Set(s).add(id))
       setTimeout(() => setJustDone(s => { const ns = new Set(s); ns.delete(id); return ns }), 3000)
     }
     setCompleting(s => { const ns = new Set(s); ns.delete(id); return ns })
+  }
+
+  async function toggleHistory(id: string) {
+    if (historyItem === id) { setHistoryItem(null); return }
+    setHistoryItem(id)
+    if (itemHistory[id]) return
+    setLoadingHistory(id)
+    const { data } = await supabase
+      .from('tracker_logs')
+      .select('*')
+      .eq('item_id', id)
+      .order('completed_at', { ascending: false })
+      .limit(30)
+    setItemHistory(prev => ({ ...prev, [id]: (data as TrackerLog[]) || [] }))
+    setLoadingHistory(null)
   }
 
   async function deleteItem(id: string) {
@@ -460,6 +484,8 @@ function TrackerTab({ profile }: { profile: Profile }) {
             const { text: urgText, color: urgColor } = urgencyLabel(item)
             const busy = completing.has(item.id)
             const done = justDone.has(item.id)
+            const isConfirming = confirmingItem === item.id
+            const isShowingHistory = historyItem === item.id
             return (
               <div key={item.id} className="bg-white rounded-2xl border p-4">
                 <div className="flex items-start gap-3">
@@ -481,10 +507,10 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       </div>
                     ) : done ? (
                       <span className="text-xs text-green-600 font-medium bg-green-50 rounded-full px-2.5 py-1">✓ 完成</span>
-                    ) : (
+                    ) : isConfirming ? null : (
                       <>
                         <button
-                          onClick={() => completeItem(item.id)}
+                          onClick={() => { setConfirmingItem(item.id); setConfirmNote('') }}
                           disabled={busy}
                           className="text-xs font-medium text-white bg-green-500 hover:bg-green-600 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
                         >
@@ -497,6 +523,67 @@ function TrackerTab({ profile }: { profile: Profile }) {
                     )}
                   </div>
                 </div>
+
+                {/* Inline confirm with note */}
+                {isConfirming && (
+                  <div className="mt-3 pt-3 border-t space-y-2">
+                    <Input
+                      autoFocus
+                      placeholder="備註（選填），按 Enter 確認"
+                      value={confirmNote}
+                      onChange={e => setConfirmNote(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && completeItem(item.id, confirmNote)}
+                      className="text-sm h-8"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => completeItem(item.id, confirmNote)}
+                        className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium"
+                      >
+                        確認完成
+                      </button>
+                      <button
+                        onClick={() => { setConfirmingItem(null); setConfirmNote('') }}
+                        className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* History toggle */}
+                {!isConfirming && (
+                  <button
+                    onClick={() => toggleHistory(item.id)}
+                    className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    {isShowingHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    歷史記錄
+                  </button>
+                )}
+
+                {/* History list */}
+                {isShowingHistory && (
+                  <div className="mt-2 pt-2 border-t">
+                    {loadingHistory === item.id ? (
+                      <p className="text-xs text-gray-400 py-2">載入中...</p>
+                    ) : (itemHistory[item.id] || []).length === 0 ? (
+                      <p className="text-xs text-gray-400 py-2">尚無完成記錄</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                        {(itemHistory[item.id] || []).map(log => (
+                          <div key={log.id} className="flex items-start gap-3 text-xs">
+                            <span className="text-gray-400 shrink-0 w-28">
+                              {format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}
+                            </span>
+                            {log.note && <span className="text-gray-600">{log.note}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
