@@ -215,8 +215,17 @@ function SearchContent() {
             </div>
           </div>
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-400">新增到</span>
+              {profile && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  profile.slot === 2
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-green-100 text-green-700'
+                }`}>
+                  {profile.display_name}
+                </span>
+              )}
               <Badge variant="secondary" className="text-xs">{MEAL_LABELS[mealType]}</Badge>
             </div>
             <div className="flex gap-1.5">
