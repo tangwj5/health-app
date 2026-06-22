@@ -19,20 +19,13 @@ interface Props {
   onAdded: () => void
 }
 
-const RATIOS = [
-  { label: '全部', value: 1 },
-  { label: '3/4', value: 0.75 },
-  { label: '1/2', value: 0.5 },
-  { label: '1/3', value: 1 / 3 },
-  { label: '1/4', value: 0.25 },
-]
-
 export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose, onAdded }: Props) {
   const supabase = createClient()
   const [quantities, setQuantities] = useState<Record<string, number>>(
     Object.fromEntries(preset.items.map(item => [item.id, item.quantity]))
   )
   const [ratio, setRatio] = useState(1)
+  const [sliderPct, setSliderPct] = useState(100)
   const [loading, setLoading] = useState(false)
 
   function applyRatio(r: number) {
@@ -93,20 +86,35 @@ export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose,
         </DialogHeader>
         <div className="space-y-3">
           {/* Ratio selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500 shrink-0">吃多少？</span>
-            <div className="flex gap-1 flex-1">
-              {RATIOS.map(r => (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 shrink-0">吃多少？</span>
+              <span className="text-sm font-semibold text-green-600">{sliderPct}%</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              value={sliderPct}
+              onChange={e => {
+                const pct = parseInt(e.target.value, 10)
+                setSliderPct(pct)
+                applyRatio(pct / 100)
+              }}
+              className="w-full accent-green-500"
+            />
+            <div className="flex gap-1">
+              {[25, 50, 75, 100].map(pct => (
                 <button
-                  key={r.label}
-                  onClick={() => applyRatio(r.value)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                    ratio === r.value
+                  key={pct}
+                  onClick={() => { setSliderPct(pct); applyRatio(pct / 100) }}
+                  className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                    sliderPct === pct
                       ? 'bg-green-500 text-white border-green-500'
                       : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
                   }`}
                 >
-                  {r.label}
+                  {pct}%
                 </button>
               ))}
             </div>

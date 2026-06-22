@@ -68,6 +68,7 @@ function SearchContent() {
   const [showCustom, setShowCustom] = useState(false)
   const [editingFood, setEditingFood] = useState<Food | null>(null)
   const [presets, setPresets] = useState<MealPreset[]>([])
+  const [presetResults, setPresetResults] = useState<MealPreset[]>([])
   const [usingPreset, setUsingPreset] = useState<MealPreset | null>(null)
   const [editingPreset, setEditingPreset] = useState<MealPreset | null>(null)
   const [showCreatePreset, setShowCreatePreset] = useState(false)
@@ -123,7 +124,7 @@ function SearchContent() {
   }
 
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); setCustomResults([]); return }
+    if (!q.trim()) { setResults([]); setCustomResults([]); setPresetResults([]); return }
 
     // Cancel any in-flight search request
     abortRef.current?.abort()
@@ -141,6 +142,10 @@ function SearchContent() {
     )
     setCustomResults(matched)
 
+    // Filter presets client-side
+    const matchedPresets = presets.filter(p => p.name.toLowerCase().includes(lq))
+    setPresetResults(matchedPresets)
+
     try {
       const res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`, { signal: controller.signal })
       const offRes = await res.json()
@@ -157,7 +162,7 @@ function SearchContent() {
         setSearching(false)
       }
     }
-  }, [allCustomFoods])
+  }, [allCustomFoods, presets])
 
   useEffect(() => {
     const timer = setTimeout(() => doSearch(query), 500)
@@ -321,6 +326,44 @@ function SearchContent() {
         {/* Search results */}
         {searching && (
           <div className="text-center py-8 text-gray-400 text-sm">搜尋中...</div>
+        )}
+
+        {/* Preset results when searching */}
+        {!searching && query && presetResults.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <UtensilsCrossed className="h-4 w-4 text-gray-400" />
+              <span className="text-sm font-medium text-gray-600">餐點組合</span>
+            </div>
+            <div className="bg-white rounded-2xl border divide-y overflow-hidden">
+              {presetResults.map(preset => {
+                const totalCal = preset.items.reduce((s, i) => s + Math.round(i.food.calories_per_serving * i.quantity), 0)
+                return (
+                  <div key={preset.id} className="flex items-center hover:bg-gray-50">
+                    <button
+                      onClick={() => setUsingPreset(preset)}
+                      className="flex-1 flex items-center px-4 py-3 gap-3 text-left min-w-0"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{preset.name}</p>
+                        <p className="text-xs text-gray-400">{preset.items.length} 種食材</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-semibold text-gray-700">{totalCal}</p>
+                        <p className="text-xs text-gray-400">kcal</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditingPreset(preset) }}
+                      className="px-3 py-3 text-gray-300 hover:text-gray-500 shrink-0"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         {!searching && query && customResults.length > 0 && (

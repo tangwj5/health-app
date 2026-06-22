@@ -272,6 +272,8 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
   const supabase = createClient()
   const metaDef = METRICS.find(m => m.key === activeMetric)!
 
+  const [dataFilter, setDataFilter] = useState<'all' | 'first' | 'other'>('all')
+
   // latest first-of-day entry for current stats
   const latest = [...metrics].reverse().find(m => m.is_first_of_day)
   const latestAll = metrics.length ? metrics[metrics.length - 1] : null
@@ -296,11 +298,16 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
     ? Math.abs(distToTarget / fourWeekRate)
     : null
 
-  // SVG line chart — every is_first_of_day record
+  // SVG line chart — filtered by dataFilter
   const chartData = metrics
-    .filter(m => m.is_first_of_day && m[activeMetric] != null)
+    .filter(m => {
+      if (dataFilter === 'first') return m.is_first_of_day && m[activeMetric] != null
+      if (dataFilter === 'other') return !m.is_first_of_day && m[activeMetric] != null
+      return m[activeMetric] != null
+    })
     .map(m => ({
-      label: format(parseISO(m.recorded_at), 'M/d'),
+      label: format(parseISO(m.recorded_at), 'M/d HH:mm'),
+      shortLabel: format(parseISO(m.recorded_at), 'M/d'),
       value: m[activeMetric] as number,
     }))
   const chartValues = chartData.map(d => d.value).filter((v): v is number => v != null)
@@ -309,19 +316,23 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
   const range = maxV - minV || 1
   const CHART_W = 320
   const CHART_H = 120
-  const PAD = 8
+  const PAD = 24
   const points = chartData
     .map((d, i) => {
       if (d.value == null) return null
       const x = PAD + (i / Math.max(chartData.length - 1, 1)) * (CHART_W - PAD * 2)
       const y = PAD + ((maxV - d.value) / range) * (CHART_H - PAD * 2)
-      return { x, y, value: d.value, label: d.label }
+      return { x, y, value: d.value, label: d.label, shortLabel: d.shortLabel }
     })
     .filter((p): p is NonNullable<typeof p> => p != null)
 
-  const pathD = points.length > 1
-    ? 'M ' + points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' L ')
-    : ''
+  // Y-axis gridlines
+  const ySteps = 4
+  const gridLines = Array.from({ length: ySteps + 1 }, (_, i) => {
+    const val = minV + (range / ySteps) * (ySteps - i)
+    const y = PAD + (i / ySteps) * (CHART_H - PAD * 2)
+    return { val, y }
+  })
 
   const [editingTarget, setEditingTarget] = useState(false)
   const [targetForm, setTargetForm] = useState({
@@ -468,7 +479,7 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
           </div>
         </div>
 
-        <div className="flex gap-1 mb-3">
+        <div className="flex gap-1 mb-2">
           {RANGES.map(r => (
             <button
               key={r.weeks}
@@ -482,9 +493,32 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
           ))}
         </div>
 
+        <div className="flex gap-1 mb-3">
+          {([['all', '全部'], ['first', '今日首次'], ['other', '其他量測']] as const).map(([val, lbl]) => (
+            <button
+              key={val}
+              onClick={() => setDataFilter(val)}
+              className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                dataFilter === val ? 'border-green-400 text-green-600 bg-green-50' : 'border-gray-200 text-gray-400'
+              }`}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+
         {points.length > 0 ? (
           <div className="w-full overflow-x-auto">
             <svg viewBox={`0 0 ${CHART_W} ${CHART_H + 20}`} className="w-full" style={{ minWidth: '240px' }}>
+              {/* Y-axis gridlines */}
+              {gridLines.map((g, i) => (
+                <g key={i}>
+                  <line x1={PAD} y1={g.y} x2={CHART_W - PAD} y2={g.y} stroke="#f3f4f6" strokeWidth="1" />
+                  <text x={PAD} y={g.y - 2} fontSize="8" fill="#d1d5db" textAnchor="start">
+                    {g.val.toFixed(1)}
+                  </text>
+                </g>
+              ))}
               {points.length > 1 && (
                 <polyline
                   points={points.map(p => `${p.x},${p.y}`).join(' ')}
@@ -494,30 +528,33 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
                   strokeLinejoin="round"
                 />
               )}
-              {points.map((p, i) => (
-                <g key={i}>
-                  <circle cx={p.x} cy={p.y} r="3" fill={metaDef.color} />
-                  {(i === 0 || i === points.length - 1 || points.length <= 8) && (
-                    <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="9" fill="#6b7280">
-                      {formatValue(p.value, activeMetric)}
-                    </text>
-                  )}
-                  {(i === 0 || i === points.length - 1 || points.length <= 8) && (
-                    <text x={p.x} y={CHART_H + 16} textAnchor="middle" fontSize="8" fill="#9ca3af">
-                      {p.label}
-                    </text>
-                  )}
-                </g>
-              ))}
+              {points.map((p, i) => {
+                const showLabel = (i % Math.max(1, Math.floor(points.length / 6)) === 0 || i === points.length - 1)
+                return (
+                  <g key={i}>
+                    <circle cx={p.x} cy={p.y} r="3" fill={metaDef.color} />
+                    {showLabel && (
+                      <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="9" fill="#6b7280">
+                        {formatValue(p.value, activeMetric)}
+                      </text>
+                    )}
+                    {showLabel && (
+                      <text x={p.x} y={CHART_H + 16} textAnchor="middle" fontSize="8" fill="#9ca3af">
+                        {p.shortLabel}
+                      </text>
+                    )}
+                  </g>
+                )
+              })}
             </svg>
           </div>
         ) : (
           <div className="text-center py-8 text-sm text-gray-400">
-            尚無基準量測資料（記錄時請勾選「今日基準」）
+            尚無量測資料
           </div>
         )}
         <p className="text-xs text-gray-400 text-center mt-1">
-          {metaDef.label}（{metaDef.unit || '單位'}）· 每日第一筆量測值
+          {metaDef.label}（{metaDef.unit || '單位'}）
         </p>
       </div>
     </div>

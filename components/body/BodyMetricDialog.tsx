@@ -10,9 +10,13 @@ import type { BodyMetric } from '@/types'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function makeRange(from: number, to: number): string[] {
+function makeDecRange(from: number, to: number, step: number): string[] {
   const arr: string[] = []
-  for (let i = from; i <= to; i++) arr.push(String(i))
+  const steps = Math.round((to - from) / step)
+  for (let i = 0; i <= steps; i++) {
+    const val = from + i * step
+    arr.push(val.toFixed(1))
+  }
   return arr
 }
 
@@ -23,19 +27,17 @@ function toLocalDatetimeStr(iso: string) {
 }
 function nowLocalDatetimeStr() { return toLocalDatetimeStr(new Date().toISOString()) }
 
-function getInt(val: string | number | null | undefined, fallback: number): string {
-  if (val == null || val === '') return String(fallback)
-  return String(Math.floor(parseFloat(String(val))))
+function findNearest(items: string[], val: number | null | undefined, fallback: string): string {
+  if (val == null) return fallback
+  const target = val
+  let best = items[0]
+  let bestDiff = Math.abs(parseFloat(items[0]) - target)
+  for (const item of items) {
+    const diff = Math.abs(parseFloat(item) - target)
+    if (diff < bestDiff) { bestDiff = diff; best = item }
+  }
+  return best
 }
-function getDec(val: string | number | null | undefined, fallback = '0', halfStep = false): string {
-  if (val == null || val === '') return fallback
-  const n = parseFloat(String(val))
-  if (isNaN(n)) return fallback
-  const frac = n - Math.floor(n)
-  if (halfStep) return frac >= 0.3 ? '5' : '0'
-  return String(Math.min(9, Math.round(frac * 10)))
-}
-function joinVal(int: string, dec: string): string { return `${int}.${dec}` }
 
 // ── Drum ─────────────────────────────────────────────────────────────────────
 
@@ -49,7 +51,7 @@ interface DrumProps {
   width?: number
 }
 
-function Drum({ items, value, onChange, width = 64 }: DrumProps) {
+function Drum({ items, value, onChange, width = 96 }: DrumProps) {
   const ref = useRef<HTMLDivElement>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mounted = useRef(false)
@@ -125,31 +127,23 @@ function Drum({ items, value, onChange, width = 64 }: DrumProps) {
   )
 }
 
-// ── MetricPicker row ──────────────────────────────────────────────────────────
-
-const DEC_10 = makeRange(0, 9)
-const DEC_HALF = ['0', '5']
+// ── MetricPicker ──────────────────────────────────────────────────────────────
 
 interface MetricPickerProps {
   label: string
   unit: string
-  intItems: string[]
-  decItems?: string[]
-  intValue: string
-  decValue: string
-  onIntChange: (v: string) => void
-  onDecChange: (v: string) => void
+  items: string[]
+  value: string
+  onChange: (v: string) => void
 }
 
-function MetricPicker({ label, unit, intItems, decItems = DEC_10, intValue, decValue, onIntChange, onDecChange }: MetricPickerProps) {
+function MetricPicker({ label, unit, items, value, onChange }: MetricPickerProps) {
   return (
     <div className="flex flex-col items-center">
       <p className="text-xs font-medium text-gray-500 mb-1">{label}</p>
-      <div className="flex items-center gap-0.5">
-        <Drum items={intItems} value={intValue} onChange={onIntChange} width={68} />
-        <span className="text-xl text-gray-400 font-light pb-0.5">.</span>
-        <Drum items={decItems} value={decValue} onChange={onDecChange} width={44} />
-        <span className="text-xs text-gray-400 ml-1 w-6">{unit}</span>
+      <div className="flex items-center gap-1">
+        <Drum items={items} value={value} onChange={onChange} width={96} />
+        <span className="text-xs text-gray-400 w-6">{unit}</span>
       </div>
     </div>
   )
@@ -165,10 +159,10 @@ interface Props {
   onSaved: () => void
 }
 
-const WEIGHT_INT  = makeRange(30, 160)
-const FATPCT_INT  = makeRange(3, 60)
-const MUSCLE_INT  = makeRange(10, 80)
-const VISCERAL_INT = makeRange(1, 30)
+const WEIGHT_ITEMS   = makeDecRange(30, 150, 0.1)
+const FATPCT_ITEMS   = makeDecRange(3, 60, 0.1)
+const MUSCLE_ITEMS   = makeDecRange(10, 80, 0.1)
+const VISCERAL_ITEMS = makeDecRange(1, 30, 0.5)
 
 export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSaved }: Props) {
   const supabase = createClient()
@@ -182,15 +176,11 @@ export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSa
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // integer + decimal state for each metric
-  const [wInt,  setWInt]  = useState(() => getInt(src?.weight_kg,    70))
-  const [wDec,  setWDec]  = useState(() => getDec(src?.weight_kg,   '0'))
-  const [bfInt, setBfInt] = useState(() => getInt(src?.body_fat_pct, 20))
-  const [bfDec, setBfDec] = useState(() => getDec(src?.body_fat_pct,'0'))
-  const [mInt,  setMInt]  = useState(() => getInt(src?.muscle_kg,    30))
-  const [mDec,  setMDec]  = useState(() => getDec(src?.muscle_kg,   '0'))
-  const [vInt,  setVInt]  = useState(() => getInt(src?.visceral_fat,  5))
-  const [vDec,  setVDec]  = useState(() => getDec(src?.visceral_fat,'0', true))
+  // single value state for each metric
+  const [wVal,  setWVal]  = useState(() => findNearest(WEIGHT_ITEMS,   src?.weight_kg,    '70.0'))
+  const [bfVal, setBfVal] = useState(() => findNearest(FATPCT_ITEMS,   src?.body_fat_pct, '20.0'))
+  const [mVal,  setMVal]  = useState(() => findNearest(MUSCLE_ITEMS,   src?.muscle_kg,    '30.0'))
+  const [vVal,  setVVal]  = useState(() => findNearest(VISCERAL_ITEMS, src?.visceral_fat,  '5.0'))
 
   async function handleSave() {
     if (!recordedAt) { setError('請填入記錄時間'); return }
@@ -200,10 +190,10 @@ export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSa
     const payload = {
       profile_id:    profileId,
       recorded_at:   new Date(recordedAt).toISOString(),
-      weight_kg:     parseFloat(joinVal(wInt,  wDec)),
-      body_fat_pct:  parseFloat(joinVal(bfInt, bfDec)),
-      muscle_kg:     parseFloat(joinVal(mInt,  mDec)),
-      visceral_fat:  parseFloat(joinVal(vInt,  vDec)),
+      weight_kg:     parseFloat(wVal),
+      body_fat_pct:  parseFloat(bfVal),
+      muscle_kg:     parseFloat(mVal),
+      visceral_fat:  parseFloat(vVal),
       is_first_of_day: isFirstOfDay,
       note: note || null,
     }
@@ -238,27 +228,19 @@ export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSa
           <div className="grid grid-cols-2 gap-x-2 gap-y-4 bg-gray-50 rounded-2xl p-3">
             <MetricPicker
               label="體重" unit="kg"
-              intItems={WEIGHT_INT}  decItems={DEC_10}
-              intValue={wInt}  decValue={wDec}
-              onIntChange={setWInt}  onDecChange={setWDec}
+              items={WEIGHT_ITEMS} value={wVal} onChange={setWVal}
             />
             <MetricPicker
               label="體脂" unit="%"
-              intItems={FATPCT_INT}  decItems={DEC_10}
-              intValue={bfInt} decValue={bfDec}
-              onIntChange={setBfInt} onDecChange={setBfDec}
+              items={FATPCT_ITEMS} value={bfVal} onChange={setBfVal}
             />
             <MetricPicker
               label="肌肉" unit="kg"
-              intItems={MUSCLE_INT}  decItems={DEC_10}
-              intValue={mInt}  decValue={mDec}
-              onIntChange={setMInt}  onDecChange={setMDec}
+              items={MUSCLE_ITEMS} value={mVal} onChange={setMVal}
             />
             <MetricPicker
               label="內臟脂肪" unit=""
-              intItems={VISCERAL_INT} decItems={DEC_HALF}
-              intValue={vInt}  decValue={vDec}
-              onIntChange={setVInt}  onDecChange={setVDec}
+              items={VISCERAL_ITEMS} value={vVal} onChange={setVVal}
             />
           </div>
 
