@@ -21,27 +21,32 @@ interface Props {
 
 export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose, onAdded }: Props) {
   const supabase = createClient()
-  const [quantities, setQuantities] = useState<Record<string, number>>(
+
+  // baseQty: user-adjusted per-item quantities (independent of ratio)
+  const [baseQty, setBaseQty] = useState<Record<string, number>>(
     Object.fromEntries(preset.items.map(item => [item.id, item.quantity]))
   )
-  const [ratio, setRatio] = useState(1)
   const [sliderPct, setSliderPct] = useState(100)
   const [loading, setLoading] = useState(false)
 
-  function applyRatio(r: number) {
-    setRatio(r)
-    setQuantities(Object.fromEntries(
-      preset.items.map(item => [item.id, Math.round(item.quantity * r * 10) / 10])
-    ))
-  }
+  // final quantity = base * ratio
+  const quantities = Object.fromEntries(
+    preset.items.map(item => [
+      item.id,
+      Math.round(baseQty[item.id] * (sliderPct / 100) * 10) / 10,
+    ])
+  )
 
-  function setQty(itemId: string, qty: number) {
-    setRatio(-1) // custom
-    setQuantities(prev => ({ ...prev, [itemId]: Math.max(0, parseFloat(qty.toFixed(1))) }))
+  // manual edit: set base to typed value, keep ratio unchanged
+  function setQty(itemId: string, val: number) {
+    const safeVal = Math.max(0, parseFloat(val.toFixed(1)) || 0)
+    // back-calculate base so displayed value = typed value regardless of current ratio
+    const newBase = sliderPct > 0 ? Math.round((safeVal / (sliderPct / 100)) * 10) / 10 : safeVal
+    setBaseQty(prev => ({ ...prev, [itemId]: newBase }))
   }
 
   const totals = preset.items.reduce((acc, item) => {
-    const qty = quantities[item.id] ?? item.quantity
+    const qty = quantities[item.id] ?? 0
     return {
       calories: acc.calories + Math.round(item.food.calories_per_serving * qty),
       protein: parseFloat((acc.protein + item.food.protein_per_serving * qty).toFixed(1)),
@@ -85,41 +90,6 @@ export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose,
           <DialogTitle>{preset.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          {/* Ratio selector */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 shrink-0">吃多少？</span>
-              <span className="text-sm font-semibold text-green-600">{sliderPct}%</span>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={100}
-              value={sliderPct}
-              onChange={e => {
-                const pct = parseInt(e.target.value, 10)
-                setSliderPct(pct)
-                applyRatio(pct / 100)
-              }}
-              className="w-full accent-green-500"
-            />
-            <div className="flex gap-1">
-              {[25, 50, 75, 100].map(pct => (
-                <button
-                  key={pct}
-                  onClick={() => { setSliderPct(pct); applyRatio(pct / 100) }}
-                  className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                    sliderPct === pct
-                      ? 'bg-green-500 text-white border-green-500'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
-                  }`}
-                >
-                  {pct}%
-                </button>
-              ))}
-            </div>
-          </div>
-
           {preset.items.map(item => {
             const qty = quantities[item.id] ?? item.quantity
             const cals = Math.round(item.food.calories_per_serving * qty)
@@ -151,6 +121,40 @@ export function UsePresetDialog({ preset, profileId, mealType, logDate, onClose,
               </div>
             )
           })}
+
+          {/* Ratio selector — applied on top of adjusted quantities */}
+          <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 shrink-0">吃多少？</span>
+              <span className="text-sm font-semibold text-green-600">{sliderPct}%</span>
+              {sliderPct < 100 && (
+                <span className="text-xs text-gray-400">（以上方分量為基準）</span>
+              )}
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              value={sliderPct}
+              onChange={e => setSliderPct(parseInt(e.target.value, 10))}
+              className="w-full accent-green-500"
+            />
+            <div className="flex gap-1">
+              {[25, 50, 75, 100].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => setSliderPct(pct)}
+                  className={`flex-1 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                    sliderPct === pct
+                      ? 'bg-green-500 text-white border-green-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+                  }`}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="bg-green-50 border border-green-100 rounded-xl p-3">
             <p className="text-xs font-semibold text-gray-500 mb-2">合計營養</p>
