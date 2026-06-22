@@ -129,6 +129,7 @@ export interface TrackerItem {
   name: string
   category: string
   interval_days: number | null
+  note: string | null
   is_active: boolean
   is_pinned: boolean
   sort_order: number

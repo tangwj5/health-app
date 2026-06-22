@@ -330,7 +330,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [itemHistory, setItemHistory] = useState<Record<string, TrackerLog[]>>({})
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '' })
+  const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '', note: '' })
   const [adding, setAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
@@ -405,12 +405,13 @@ function TrackerTab({ profile }: { profile: Profile }) {
       name: newItem.name.trim(),
       category: newItem.category,
       interval_days: newItem.interval_days ? parseInt(newItem.interval_days) : null,
+      note: newItem.note.trim() || null,
       sort_order: items.length,
     }).select().single()
     if (data) {
       setItems(prev => [...prev, { ...(data as TrackerItem), lastCompletedAt: null, daysSince: null }])
     }
-    setNewItem({ name: '', category: '其他', interval_days: '' })
+    setNewItem({ name: '', category: '其他', interval_days: '', note: '' })
     setShowAdd(false); setAdding(false)
   }
 
@@ -505,6 +506,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       )}
                     </div>
                     <p className={`text-xs mt-0.5 ${urgColor}`}>{urgText}</p>
+                    {item.note && <p className="text-xs text-gray-400 mt-1">{item.note}</p>}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {deleteConfirm === item.id ? (
@@ -639,6 +641,16 @@ function TrackerTab({ profile }: { profile: Profile }) {
               onChange={e => setNewItem(p => ({ ...p, interval_days: e.target.value }))}
             />
             <p className="text-xs text-gray-400">留空則只記錄頻率，不提醒到期</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">備註（選填）</p>
+            <textarea
+              placeholder="注意事項、提醒自己的細節..."
+              value={newItem.note}
+              onChange={e => setNewItem(p => ({ ...p, note: e.target.value }))}
+              rows={2}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
+            />
           </div>
           <div className="flex gap-2">
             <Button onClick={addItem} disabled={adding || !newItem.name.trim()} className="flex-1 bg-green-500 hover:bg-green-600 h-9 text-sm">
