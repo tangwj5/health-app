@@ -528,24 +528,38 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
                   strokeLinejoin="round"
                 />
               )}
-              {points.map((p, i) => {
-                const showLabel = (i % Math.max(1, Math.floor(points.length / 6)) === 0 || i === points.length - 1)
-                return (
+              {(() => {
+                const MIN_GAP = 30
+                const labelEvery = Math.max(1, Math.floor(points.length / 6))
+                // initial candidates: every N-th + last
+                const want = points.map((_, i) => i % labelEvery === 0 || i === points.length - 1)
+                // remove any label that is too close to the NEXT label (last always wins)
+                const show = [...want]
+                for (let i = points.length - 2; i >= 0; i--) {
+                  if (!show[i]) continue
+                  for (let j = i + 1; j < points.length; j++) {
+                    if (show[j]) {
+                      if (points[j].x - points[i].x < MIN_GAP) show[i] = false
+                      break
+                    }
+                  }
+                }
+                return points.map((p, i) => (
                   <g key={i}>
                     <circle cx={p.x} cy={p.y} r="3" fill={metaDef.color} />
-                    {showLabel && (
+                    {show[i] && (
                       <text x={p.x} y={p.y - 6} textAnchor="middle" fontSize="9" fill="#6b7280">
                         {formatValue(p.value, activeMetric)}
                       </text>
                     )}
-                    {showLabel && (
+                    {show[i] && (
                       <text x={p.x} y={CHART_H + 16} textAnchor="middle" fontSize="8" fill="#9ca3af">
                         {p.shortLabel}
                       </text>
                     )}
                   </g>
-                )
-              })}
+                ))
+              })()}
             </svg>
           </div>
         ) : (
