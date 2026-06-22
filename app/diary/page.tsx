@@ -30,13 +30,17 @@ export default function DiaryPage() {
   const [loading, setLoading] = useState(true)
   const [profilesState, setProfilesState] = useState<'loading' | 'ready' | 'no-auth'>('loading')
   const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null)
+  const [exerciseCalories, setExerciseCalories] = useState(0)
 
   useEffect(() => {
     loadProfiles()
   }, [])
 
   useEffect(() => {
-    if (activeProfile()) loadEntries()
+    if (activeProfile()) {
+      loadEntries()
+      loadExerciseCalories()
+    }
   }, [activeSlot, selectedDate, profiles])
 
   async function loadProfiles() {
@@ -53,6 +57,19 @@ export default function DiaryPage() {
     } catch {
       setProfilesState('no-auth')
     }
+  }
+
+  async function loadExerciseCalories() {
+    const profile = activeProfile()
+    if (!profile) return
+    const { data } = await supabase
+      .from('exercises')
+      .select('calories_est')
+      .eq('profile_id', profile.id)
+      .gte('recorded_at', `${selectedDate}T00:00:00`)
+      .lte('recorded_at', `${selectedDate}T23:59:59`)
+    const total = ((data || []) as { calories_est: number }[]).reduce((s, e) => s + (e.calories_est || 0), 0)
+    setExerciseCalories(total)
   }
 
   async function loadEntries() {
@@ -148,6 +165,7 @@ export default function DiaryPage() {
             entries={entries}
             calorieTarget={profile.calorie_target}
             proteinTarget={profile.protein_target}
+            exerciseCalories={exerciseCalories}
           />
         )}
 

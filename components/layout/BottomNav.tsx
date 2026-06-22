@@ -2,12 +2,13 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BookOpen, Search, Activity, Settings } from 'lucide-react'
+import { BookOpen, Search, Activity, ListChecks, Settings } from 'lucide-react'
 
 const NAV_ITEMS = [
   { href: '/diary', label: '飲食日記', icon: BookOpen },
   { href: '/search', label: '搜尋食物', icon: Search },
   { href: '/body', label: '體組成', icon: Activity },
+  { href: '/track', label: '追蹤', icon: ListChecks },
   { href: '/settings', label: '設定', icon: Settings },
 ]
 

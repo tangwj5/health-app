@@ -7,6 +7,7 @@ interface Props {
   entries: MealEntry[]
   calorieTarget: number
   proteinTarget: number
+  exerciseCalories?: number
 }
 
 function ProgressBar({ value, target, color }: { value: number; target: number; color: string }) {
@@ -24,7 +25,7 @@ const STATUS_COLORS = {
   red: 'bg-red-500',
 }
 
-export function NutritionSummary({ entries, calorieTarget, proteinTarget }: Props) {
+export function NutritionSummary({ entries, calorieTarget, proteinTarget, exerciseCalories = 0 }: Props) {
   const totals = entries.reduce(
     (acc, e) => ({
       calories: acc.calories + e.calories,
@@ -59,6 +60,12 @@ export function NutritionSummary({ entries, calorieTarget, proteinTarget }: Prop
         target={calorieTarget}
         color={STATUS_COLORS[calStatus]}
       />
+      {exerciseCalories > 0 && (
+        <div className="flex items-center justify-between mt-1.5 text-xs text-gray-400">
+          <span className="text-orange-500">🏃 消耗 -{exerciseCalories} kcal</span>
+          <span>淨攝入 <span className="font-semibold text-gray-600">{Math.round(totals.calories - exerciseCalories)}</span> kcal</span>
+        </div>
+      )}
 
       {/* Macros */}
       <div className="grid grid-cols-3 gap-3 mt-4">

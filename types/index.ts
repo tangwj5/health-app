@@ -90,6 +90,59 @@ export interface MealPresetItem {
   quantity_unit: 'serving' | 'g'
 }
 
+export type ExerciseType = 'walking' | 'strength'
+export type Intensity = 'easy' | 'moderate' | 'hard'
+
+export interface Exercise {
+  id: string
+  profile_id: string
+  recorded_at: string
+  exercise_type: ExerciseType
+  body_parts: string[]
+  intensity: Intensity
+  duration_min: number
+  calories_est: number
+  note: string | null
+  created_at: string
+}
+
+export interface Habit {
+  id: string
+  profile_id: string
+  name: string
+  sort_order: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface HabitLog {
+  id: string
+  habit_id: string
+  profile_id: string
+  logged_date: string
+  created_at: string
+}
+
+export interface TrackerItem {
+  id: string
+  profile_id: string
+  name: string
+  category: string
+  interval_days: number | null
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface TrackerLog {
+  id: string
+  item_id: string
+  profile_id: string
+  completed_at: string
+  note: string | null
+  created_at: string
+}
+
 export interface DayNutrition {
   calories: number
   protein: number

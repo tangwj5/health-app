@@ -9,9 +9,11 @@ import { BodyMetricDialog } from '@/components/body/BodyMetricDialog'
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, TrendingDown, TrendingUp, Minus } from 'lucide-react'
 import { format, parseISO, startOfWeek, endOfWeek, subWeeks, addDays } from 'date-fns'
-import type { BodyMetric, Profile } from '@/types'
+import type { BodyMetric, Profile, Exercise } from '@/types'
+import { ExerciseDialog } from '@/components/body/ExerciseDialog'
+import { ExerciseTab } from '@/components/body/ExerciseTab'
 
-const TABS = ['趨勢', '飲食連動', '歷史記錄'] as const
+const TABS = ['趨勢', '飲食連動', '運動', '歷史記錄'] as const
 type Tab = (typeof TABS)[number]
 
 const METRICS = [
@@ -49,6 +51,8 @@ export default function BodyPage() {
   const [rangeWeeks, setRangeWeeks] = useState(13)
   const [weeklyStats, setWeeklyStats] = useState<Array<{week: string, avg: Record<MetricKey, number | null>}>>([])
   const [mealCorrelation, setMealCorrelation] = useState<Array<{date: string, calories: number, protein: number, weight: number | null}>>([])
+  const [exercises, setExercises] = useState<Exercise[]>([])
+  const [showExerciseDialog, setShowExerciseDialog] = useState(false)
 
   useEffect(() => {
     async function loadProfiles() {
@@ -83,6 +87,18 @@ export default function BodyPage() {
       .gte('recorded_at', since)
       .order('recorded_at', { ascending: true })
     setMetrics((data as BodyMetric[]) || [])
+  }, [profile?.id, rangeWeeks])
+
+  const loadExercises = useCallback(async () => {
+    if (!profile) return
+    const since = format(subWeeks(new Date(), rangeWeeks), 'yyyy-MM-dd')
+    const { data } = await supabase
+      .from('exercises')
+      .select('*')
+      .eq('profile_id', profile.id)
+      .gte('recorded_at', since)
+      .order('recorded_at', { ascending: true })
+    setExercises((data as Exercise[]) || [])
   }, [profile?.id, rangeWeeks])
 
   const loadMealCorrelation = useCallback(async () => {
@@ -125,6 +141,10 @@ export default function BodyPage() {
   useEffect(() => {
     if (tab === '飲食連動') loadMealCorrelation()
   }, [tab, loadMealCorrelation])
+
+  useEffect(() => {
+    if (tab === '運動' && profile) loadExercises()
+  }, [tab, loadExercises])
 
   // weekly averages for trend chart
   useEffect(() => {
@@ -188,12 +208,21 @@ export default function BodyPage() {
             {profiles.length > 0 && (
               <PersonSwitcher profiles={profiles} activeSlot={activeSlot} onSwitch={setActiveSlot} />
             )}
-            <button
-              onClick={() => { setEditingMetric(null); setShowDialog(true) }}
-              className="flex items-center gap-1 text-sm font-medium text-white bg-green-500 rounded-full px-3 py-1.5 hover:bg-green-600"
-            >
-              <Plus className="h-4 w-4" />記錄
-            </button>
+            {tab === '運動' ? (
+              <button
+                onClick={() => setShowExerciseDialog(true)}
+                className="flex items-center gap-1 text-sm font-medium text-white bg-green-500 rounded-full px-3 py-1.5 hover:bg-green-600"
+              >
+                <Plus className="h-4 w-4" />運動
+              </button>
+            ) : (
+              <button
+                onClick={() => { setEditingMetric(null); setShowDialog(true) }}
+                className="flex items-center gap-1 text-sm font-medium text-white bg-green-500 rounded-full px-3 py-1.5 hover:bg-green-600"
+              >
+                <Plus className="h-4 w-4" />記錄
+              </button>
+            )}
           </div>
           {/* Tab bar */}
           <div className="flex gap-0 mt-3 border-b border-gray-100">
@@ -228,6 +257,13 @@ export default function BodyPage() {
         {tab === '飲食連動' && (
           <DietTab profile={profile} data={mealCorrelation} metrics={metrics} />
         )}
+        {tab === '運動' && (
+          <ExerciseTab
+            profile={profile}
+            exercises={exercises}
+            metrics={metrics}
+          />
+        )}
         {tab === '歷史記錄' && (
           <HistoryTab
             metrics={[...metrics].reverse()}
@@ -239,6 +275,15 @@ export default function BodyPage() {
           />
         )}
       </div>
+
+      {showExerciseDialog && (
+        <ExerciseDialog
+          profileId={profile.id}
+          weightKg={profile.weight_kg}
+          onClose={() => setShowExerciseDialog(false)}
+          onSaved={() => { setShowExerciseDialog(false); loadExercises() }}
+        />
+      )}
 
       {showDialog && (
         <BodyMetricDialog
