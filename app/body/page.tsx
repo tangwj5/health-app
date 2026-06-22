@@ -208,21 +208,20 @@ export default function BodyPage() {
             {profiles.length > 0 && (
               <PersonSwitcher profiles={profiles} activeSlot={activeSlot} onSwitch={setActiveSlot} />
             )}
-            {tab === '運動' ? (
+            <div className="flex gap-2">
               <button
                 onClick={() => setShowExerciseDialog(true)}
-                className="flex items-center gap-1 text-sm font-medium text-white bg-green-500 rounded-full px-3 py-1.5 hover:bg-green-600"
+                className="flex items-center gap-1 text-sm font-medium text-green-600 bg-green-50 border border-green-200 rounded-full px-3 py-1.5 hover:bg-green-100"
               >
                 <Plus className="h-4 w-4" />運動
               </button>
-            ) : (
               <button
                 onClick={() => { setEditingMetric(null); setShowDialog(true) }}
                 className="flex items-center gap-1 text-sm font-medium text-white bg-green-500 rounded-full px-3 py-1.5 hover:bg-green-600"
               >
                 <Plus className="h-4 w-4" />記錄
               </button>
-            )}
+            </div>
           </div>
           {/* Tab bar */}
           <div className="flex gap-0 mt-3 border-b border-gray-100">
@@ -262,6 +261,10 @@ export default function BodyPage() {
             profile={profile}
             exercises={exercises}
             metrics={metrics}
+            onDelete={async (id) => {
+              await supabase.from('exercises').delete().eq('id', id)
+              loadExercises()
+            }}
           />
         )}
         {tab === '歷史記錄' && (

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
+import { Trash2 } from 'lucide-react'
 import { EXERCISE_TYPE_LABELS, INTENSITY_LABELS } from '@/lib/exercise'
 import type { Exercise, BodyMetric, Profile } from '@/types'
 
@@ -9,10 +10,13 @@ interface Props {
   profile: Profile
   exercises: Exercise[]
   metrics: BodyMetric[]
+  onDelete: (id: string) => Promise<void>
 }
 
-export function ExerciseTab({ exercises, metrics }: Props) {
+export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
   const [weekOffset, setWeekOffset] = useState(0)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const today = new Date()
   const dow = today.getDay()
@@ -137,22 +141,54 @@ export function ExerciseTab({ exercises, metrics }: Props) {
           <p className="text-sm font-semibold text-gray-700 mb-3">本週記錄</p>
           <div className="space-y-2">
             {[...weekEx].reverse().map(e => (
-              <div key={e.id} className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold text-gray-700">
-                      {EXERCISE_TYPE_LABELS[e.exercise_type]}
-                    </span>
-                    {e.body_parts.length > 0 && (
-                      <span className="text-xs text-blue-600">{e.body_parts.join(' / ')}</span>
-                    )}
-                    <span className="text-xs text-gray-400">{INTENSITY_LABELS[e.intensity]}</span>
-                    <span className="text-xs text-gray-500">{e.duration_min} 分鐘</span>
-                    <span className="text-xs text-orange-500">~{e.calories_est} kcal</span>
+              <div key={e.id} className="py-2 border-b border-gray-50 last:border-0">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold text-gray-700">
+                        {EXERCISE_TYPE_LABELS[e.exercise_type]}
+                      </span>
+                      {e.body_parts.length > 0 && (
+                        <span className="text-xs text-blue-600">{e.body_parts.join(' / ')}</span>
+                      )}
+                      <span className="text-xs text-gray-400">{INTENSITY_LABELS[e.intensity]}</span>
+                      <span className="text-xs text-gray-500">{e.duration_min} 分鐘</span>
+                      <span className="text-xs text-orange-500">~{e.calories_est} kcal</span>
+                    </div>
+                    {e.note && <p className="text-xs text-gray-400 mt-0.5">{e.note}</p>}
                   </div>
-                  {e.note && <p className="text-xs text-gray-400 mt-0.5">{e.note}</p>}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-gray-400">{format(parseISO(e.recorded_at), 'M/d HH:mm')}</span>
+                    <button
+                      onClick={() => setConfirmDelete(e.id)}
+                      className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-                <span className="text-xs text-gray-400 shrink-0">{format(parseISO(e.recorded_at), 'M/d HH:mm')}</span>
+                {confirmDelete === e.id && (
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={async () => {
+                        setDeleting(true)
+                        await onDelete(e.id)
+                        setConfirmDelete(null)
+                        setDeleting(false)
+                      }}
+                      disabled={deleting}
+                      className="flex-1 py-1 rounded-lg bg-red-500 text-white text-xs font-medium disabled:opacity-50"
+                    >
+                      確認刪除
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(null)}
+                      className="flex-1 py-1 rounded-lg border text-xs text-gray-500"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -8,7 +8,7 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
@@ -414,8 +414,15 @@ function TrackerTab({ profile }: { profile: Profile }) {
     setShowAdd(false); setAdding(false)
   }
 
-  // sort: overdue first, then by days since desc
+  async function togglePin(id: string, current: boolean) {
+    await supabase.from('tracker_items').update({ is_pinned: !current }).eq('id', id)
+    setItems(prev => prev.map(item => item.id === id ? { ...item, is_pinned: !current } : item))
+  }
+
+  // sort: pinned first, then overdue, then by days since desc
   const sortedItems = [...items].sort((a, b) => {
+    if (a.is_pinned && !b.is_pinned) return -1
+    if (!a.is_pinned && b.is_pinned) return 1
     const aOverdue = a.interval_days != null && a.daysSince != null && a.daysSince > a.interval_days
     const bOverdue = b.interval_days != null && b.daysSince != null && b.daysSince > b.interval_days
     if (aOverdue && !bOverdue) return -1
@@ -509,6 +516,13 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       <span className="text-xs text-green-600 font-medium bg-green-50 rounded-full px-2.5 py-1">✓ 完成</span>
                     ) : isConfirming ? null : (
                       <>
+                        <button
+                          onClick={() => togglePin(item.id, item.is_pinned)}
+                          className={`p-1 rounded transition-colors ${item.is_pinned ? 'text-orange-400' : 'text-gray-300 hover:text-orange-300'}`}
+                          title={item.is_pinned ? '取消置頂' : '置頂常用'}
+                        >
+                          <Pin className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           onClick={() => { setConfirmingItem(item.id); setConfirmNote('') }}
                           disabled={busy}
