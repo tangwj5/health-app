@@ -18,6 +18,7 @@ export interface Profile {
   protein_target: number
   target_weight_kg: number | null
   weekly_target_rate: number | null
+  calendar_token: string | null
   created_at: string
 }
 

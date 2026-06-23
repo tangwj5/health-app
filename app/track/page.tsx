@@ -8,13 +8,22 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Calendar, Pencil } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
 type Tab = typeof TABS[number]
 
 const PRESET_CATEGORIES = ['家事', '耗材', '保養', '旅遊', '健康', '其他']
+
+function toLocalDateTimeStr(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function nowLocalStr(): string {
+  return toLocalDateTimeStr(new Date())
+}
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -101,10 +110,9 @@ function HabitTab({ profile }: { profile: Profile }) {
   const todayDate = new Date()
   const today = format(todayDate, 'yyyy-MM-dd')
   const GRID_DAYS = 35
-  // always start grid on Monday (Mon=0 in Mon-first week)
   const dow = (todayDate.getDay() + 6) % 7
   const thisMonday = subDays(todayDate, dow)
-  const gridStart = subDays(thisMonday, 28) // 4 complete weeks before this Monday
+  const gridStart = subDays(thisMonday, 28)
 
   const [habits, setHabits] = useState<Habit[]>([])
   const [logs, setLogs] = useState<HabitLog[]>([])
@@ -178,7 +186,6 @@ function HabitTab({ profile }: { profile: Profile }) {
     setDeleteConfirm(null)
   }
 
-  // 5 weeks × 7 days, always starting from Monday
   const gridDays = Array.from({ length: GRID_DAYS }, (_, i) =>
     format(addDays(gridStart, i), 'yyyy-MM-dd')
   )
@@ -187,7 +194,6 @@ function HabitTab({ profile }: { profile: Profile }) {
 
   return (
     <div className="space-y-4">
-      {/* Today checklist */}
       <div className="bg-white rounded-2xl border p-4">
         <p className="text-sm font-semibold text-gray-700 mb-3">
           今天 {format(new Date(), 'M/d')}
@@ -255,7 +261,6 @@ function HabitTab({ profile }: { profile: Profile }) {
         )}
       </div>
 
-      {/* Stats per habit */}
       {habits.length > 0 && (
         <div className="space-y-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">近 {GRID_DAYS} 天統計</p>
@@ -278,7 +283,6 @@ function HabitTab({ profile }: { profile: Profile }) {
                     <span>連續 <span className="font-semibold text-gray-700">{streak}</span> 天</span>
                   </div>
                 </div>
-                {/* 5-week grid (7 cols) */}
                 <div>
                   <div className="grid grid-cols-7 gap-0.5 mb-0.5">
                     {DOW.map(d => (
@@ -326,13 +330,17 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [justDone, setJustDone] = useState<Set<string>>(new Set())
   const [confirmingItem, setConfirmingItem] = useState<string | null>(null)
   const [confirmNote, setConfirmNote] = useState('')
+  const [confirmAt, setConfirmAt] = useState(nowLocalStr())
   const [historyItem, setHistoryItem] = useState<string | null>(null)
   const [itemHistory, setItemHistory] = useState<Record<string, TrackerLog[]>>({})
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null)
+  const [editingLog, setEditingLog] = useState<string | null>(null)
+  const [editingLogAt, setEditingLogAt] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '', note: '' })
   const [adding, setAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [copiedWebcal, setCopiedWebcal] = useState(false)
 
   const loadData = useCallback(async () => {
     const [{ data: itemData }, { data: logData }] = await Promise.all([
@@ -354,26 +362,39 @@ function TrackerTab({ profile }: { profile: Profile }) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  async function completeItem(id: string, note: string) {
+  async function completeItem(id: string, note: string, completedAt: string) {
     setCompleting(s => new Set(s).add(id))
     setConfirmingItem(null)
     setConfirmNote('')
     const { data } = await supabase.from('tracker_logs').insert({
       item_id: id,
       profile_id: profile.id,
-      completed_at: new Date().toISOString(),
+      completed_at: new Date(completedAt).toISOString(),
       note: note.trim() || null,
     }).select().single()
     if (data) {
       setItems(prev => prev.map(item =>
         item.id === id ? { ...item, lastCompletedAt: (data as TrackerLog).completed_at, daysSince: 0 } : item
       ))
-      // prepend to cached history if already loaded
       setItemHistory(prev => prev[id] ? { ...prev, [id]: [data as TrackerLog, ...prev[id]] } : prev)
       setJustDone(s => new Set(s).add(id))
       setTimeout(() => setJustDone(s => { const ns = new Set(s); ns.delete(id); return ns }), 3000)
     }
     setCompleting(s => { const ns = new Set(s); ns.delete(id); return ns })
+  }
+
+  async function saveLogEdit(logId: string, itemId: string) {
+    const isoAt = new Date(editingLogAt).toISOString()
+    await supabase.from('tracker_logs').update({ completed_at: isoAt }).eq('id', logId)
+    setEditingLog(null)
+    const { data } = await supabase
+      .from('tracker_logs')
+      .select('*')
+      .eq('item_id', itemId)
+      .order('completed_at', { ascending: false })
+      .limit(30)
+    setItemHistory(prev => ({ ...prev, [itemId]: (data as TrackerLog[]) || [] }))
+    loadData()
   }
 
   async function toggleHistory(id: string) {
@@ -403,7 +424,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
     const { data } = await supabase.from('tracker_items').insert({
       profile_id: profile.id,
       name: newItem.name.trim(),
-      category: newItem.category,
+      category: newItem.category || '其他',
       interval_days: newItem.interval_days ? parseInt(newItem.interval_days) : null,
       note: newItem.note.trim() || null,
       sort_order: items.length,
@@ -420,7 +441,6 @@ function TrackerTab({ profile }: { profile: Profile }) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, is_pinned: !current } : item))
   }
 
-  // sort: pinned first, then overdue, then by days since desc
   const sortedItems = [...items].sort((a, b) => {
     if (a.is_pinned && !b.is_pinned) return -1
     if (!a.is_pinned && b.is_pinned) return 1
@@ -433,7 +453,16 @@ function TrackerTab({ profile }: { profile: Profile }) {
     return bDays - aDays
   })
 
-  const categories = ['全部', ...PRESET_CATEGORIES.filter(c => items.some(i => i.category === c))]
+  // category filter includes presets in use + any custom categories in use
+  const usedCategories = [...new Set(items.map(i => i.category))]
+  const orderedCategories = [
+    ...PRESET_CATEGORIES.filter(c => usedCategories.includes(c)),
+    ...usedCategories.filter(c => !PRESET_CATEGORIES.includes(c)),
+  ]
+  const categories = ['全部', ...orderedCategories]
+
+  // custom categories already used (shown as extra chips in the add form)
+  const customCategoriesInUse = usedCategories.filter(c => !PRESET_CATEGORIES.includes(c))
 
   const filtered = sortedItems.filter(item => {
     const catMatch = category === '全部' || item.category === category
@@ -452,6 +481,9 @@ function TrackerTab({ profile }: { profile: Profile }) {
     }
     return { text: `${item.daysSince} 天前`, color: 'text-gray-500' }
   }
+
+  // whether the typed category in the add form is a custom (non-preset) value
+  const isCustomCategory = !PRESET_CATEGORIES.includes(newItem.category) && !customCategoriesInUse.includes(newItem.category)
 
   return (
     <div className="space-y-4">
@@ -481,10 +513,81 @@ function TrackerTab({ profile }: { profile: Profile }) {
         ))}
       </div>
 
+      {/* Add item — placed at top */}
+      {showAdd ? (
+        <div className="bg-white rounded-2xl border p-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700">新增事項</p>
+          <Input
+            autoFocus
+            placeholder="事項名稱"
+            value={newItem.name}
+            onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
+          />
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">分類</p>
+            <div className="flex flex-wrap gap-2">
+              {[...PRESET_CATEGORIES, ...customCategoriesInUse].map(c => (
+                <button
+                  key={c}
+                  onClick={() => setNewItem(p => ({ ...p, category: c }))}
+                  className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
+                    newItem.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <Input
+              placeholder="或輸入自訂分類..."
+              value={isCustomCategory ? newItem.category : ''}
+              onChange={e => {
+                const val = e.target.value
+                setNewItem(p => ({ ...p, category: val || '其他' }))
+              }}
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">提醒週期（天，選填）</p>
+            <Input
+              type="number" min="1"
+              placeholder="例：90（每90天）"
+              value={newItem.interval_days}
+              onChange={e => setNewItem(p => ({ ...p, interval_days: e.target.value }))}
+            />
+            <p className="text-xs text-gray-400">留空則只記錄頻率，不提醒到期</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-gray-500">備註（選填）</p>
+            <textarea
+              placeholder="注意事項、提醒自己的細節..."
+              value={newItem.note}
+              onChange={e => setNewItem(p => ({ ...p, note: e.target.value }))}
+              rows={2}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={addItem} disabled={adding || !newItem.name.trim()} className="flex-1 bg-green-500 hover:bg-green-600 h-9 text-sm">
+              {adding ? '新增中...' : '新增'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-9 text-sm">取消</Button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={() => setShowAdd(true)}
+          className="w-full flex items-center justify-center gap-1.5 py-3 rounded-2xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-green-400 hover:text-green-600 transition-colors bg-white"
+        >
+          <Plus className="h-4 w-4" />新增事項
+        </button>
+      )}
+
       {/* Items list */}
       {filtered.length === 0 ? (
         <div className="text-center py-10 text-sm text-gray-400">
-          {items.length === 0 ? '還沒有事項，點下方新增' : '沒有符合的事項'}
+          {items.length === 0 ? '新增第一個事項吧' : '沒有符合的事項'}
         </div>
       ) : (
         <div className="space-y-2">
@@ -526,7 +629,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                           <Pin className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => { setConfirmingItem(item.id); setConfirmNote('') }}
+                          onClick={() => { setConfirmingItem(item.id); setConfirmNote(''); setConfirmAt(nowLocalStr()) }}
                           disabled={busy}
                           className="text-xs font-medium text-white bg-green-500 hover:bg-green-600 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
                         >
@@ -540,20 +643,29 @@ function TrackerTab({ profile }: { profile: Profile }) {
                   </div>
                 </div>
 
-                {/* Inline confirm with note */}
+                {/* Inline confirm with time + note */}
                 {isConfirming && (
                   <div className="mt-3 pt-3 border-t space-y-2">
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-400">完成時間</p>
+                      <input
+                        type="datetime-local"
+                        value={confirmAt}
+                        onChange={e => setConfirmAt(e.target.value)}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+                      />
+                    </div>
                     <Input
                       autoFocus
                       placeholder="備註（選填），按 Enter 確認"
                       value={confirmNote}
                       onChange={e => setConfirmNote(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && completeItem(item.id, confirmNote)}
+                      onKeyDown={e => e.key === 'Enter' && completeItem(item.id, confirmNote, confirmAt)}
                       className="text-sm h-8"
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={() => completeItem(item.id, confirmNote)}
+                        onClick={() => completeItem(item.id, confirmNote, confirmAt)}
                         className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium"
                       >
                         確認完成
@@ -587,13 +699,39 @@ function TrackerTab({ profile }: { profile: Profile }) {
                     ) : (itemHistory[item.id] || []).length === 0 ? (
                       <p className="text-xs text-gray-400 py-2">尚無完成記錄</p>
                     ) : (
-                      <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
                         {(itemHistory[item.id] || []).map(log => (
-                          <div key={log.id} className="flex items-start gap-3 text-xs">
-                            <span className="text-gray-400 shrink-0 w-28">
-                              {format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}
-                            </span>
-                            {log.note && <span className="text-gray-600">{log.note}</span>}
+                          <div key={log.id} className="text-xs">
+                            {editingLog === log.id ? (
+                              <div className="space-y-1.5 py-1">
+                                <input
+                                  type="datetime-local"
+                                  value={editingLogAt}
+                                  onChange={e => setEditingLogAt(e.target.value)}
+                                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
+                                />
+                                <div className="flex gap-1.5">
+                                  <button onClick={() => saveLogEdit(log.id, item.id)} className="text-xs text-green-600 px-2 py-0.5 rounded border border-green-200">儲存</button>
+                                  <button onClick={() => setEditingLog(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-start gap-2">
+                                <span className="text-gray-400 shrink-0 w-28">
+                                  {format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}
+                                </span>
+                                {log.note && <span className="text-gray-600 flex-1">{log.note}</span>}
+                                <button
+                                  onClick={() => {
+                                    setEditingLog(log.id)
+                                    setEditingLogAt(toLocalDateTimeStr(parseISO(log.completed_at)))
+                                  }}
+                                  className="text-gray-300 hover:text-gray-500 p-0.5 shrink-0 ml-auto"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -606,66 +744,32 @@ function TrackerTab({ profile }: { profile: Profile }) {
         </div>
       )}
 
-      {/* Add item */}
-      {showAdd ? (
-        <div className="bg-white rounded-2xl border p-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-700">新增事項</p>
-          <Input
-            autoFocus
-            placeholder="事項名稱"
-            value={newItem.name}
-            onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
-          />
-          <div className="space-y-1">
-            <p className="text-xs text-gray-500">分類</p>
-            <div className="flex flex-wrap gap-2">
-              {PRESET_CATEGORIES.map(c => (
-                <button
-                  key={c}
-                  onClick={() => setNewItem(p => ({ ...p, category: c }))}
-                  className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
-                    newItem.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+      {/* Webcal subscription */}
+      {profile.calendar_token && (
+        <div className="bg-white rounded-2xl border p-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Calendar className="h-4 w-4 text-blue-500 shrink-0" />
+            <p className="text-sm font-semibold text-gray-700">iPhone 行事曆訂閱</p>
           </div>
-          <div className="space-y-1">
-            <p className="text-xs text-gray-500">提醒週期（天，選填）</p>
-            <Input
-              type="number" min="1"
-              placeholder="例：90（每90天）"
-              value={newItem.interval_days}
-              onChange={e => setNewItem(p => ({ ...p, interval_days: e.target.value }))}
-            />
-            <p className="text-xs text-gray-400">留空則只記錄頻率，不提醒到期</p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs text-gray-500">備註（選填）</p>
-            <textarea
-              placeholder="注意事項、提醒自己的細節..."
-              value={newItem.note}
-              onChange={e => setNewItem(p => ({ ...p, note: e.target.value }))}
-              rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={addItem} disabled={adding || !newItem.name.trim()} className="flex-1 bg-green-500 hover:bg-green-600 h-9 text-sm">
-              {adding ? '新增中...' : '新增'}
-            </Button>
-            <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 h-9 text-sm">取消</Button>
-          </div>
+          <p className="text-xs text-gray-400 mb-3">
+            訂閱後，有設定週期的事項到期日會出現在行事曆與桌面小工具
+          </p>
+          <button
+            onClick={() => {
+              const url = `webcal://${window.location.host}/api/calendar/${profile.calendar_token}`
+              navigator.clipboard.writeText(url).then(() => {
+                setCopiedWebcal(true)
+                setTimeout(() => setCopiedWebcal(false), 2000)
+              })
+            }}
+            className="w-full py-2 rounded-xl bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"
+          >
+            {copiedWebcal ? '✓ 已複製連結' : '複製訂閱連結'}
+          </button>
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            iPhone：行事曆 app → 加入訂閱的行事曆 → 貼上連結
+          </p>
         </div>
-      ) : (
-        <button
-          onClick={() => setShowAdd(true)}
-          className="w-full flex items-center justify-center gap-1.5 py-3 rounded-2xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-green-400 hover:text-green-600 transition-colors bg-white"
-        >
-          <Plus className="h-4 w-4" />新增事項
-        </button>
       )}
     </div>
   )
