@@ -8,7 +8,7 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Calendar, Pencil } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
@@ -340,7 +340,6 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '', note: '' })
   const [adding, setAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [copiedWebcal, setCopiedWebcal] = useState(false)
 
   const loadData = useCallback(async () => {
     const [{ data: itemData }, { data: logData }] = await Promise.all([
@@ -744,33 +743,6 @@ function TrackerTab({ profile }: { profile: Profile }) {
         </div>
       )}
 
-      {/* Webcal subscription */}
-      {profile.calendar_token && (
-        <div className="bg-white rounded-2xl border p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <Calendar className="h-4 w-4 text-blue-500 shrink-0" />
-            <p className="text-sm font-semibold text-gray-700">iPhone 行事曆訂閱</p>
-          </div>
-          <p className="text-xs text-gray-400 mb-3">
-            訂閱後，有設定週期的事項到期日會出現在行事曆與桌面小工具
-          </p>
-          <button
-            onClick={() => {
-              const url = `webcal://${window.location.host}/api/calendar/${profile.calendar_token}`
-              navigator.clipboard.writeText(url).then(() => {
-                setCopiedWebcal(true)
-                setTimeout(() => setCopiedWebcal(false), 2000)
-              })
-            }}
-            className="w-full py-2 rounded-xl bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"
-          >
-            {copiedWebcal ? '✓ 已複製連結' : '複製訂閱連結'}
-          </button>
-          <p className="text-xs text-gray-400 mt-2 text-center">
-            iPhone：行事曆 app → 加入訂閱的行事曆 → 貼上連結
-          </p>
-        </div>
-      )}
     </div>
   )
 }

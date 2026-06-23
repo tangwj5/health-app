@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
-import { LogOut } from 'lucide-react'
+import { LogOut, Calendar } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { ActivityLevel, GoalType, Profile } from '@/types'
 
@@ -47,6 +47,7 @@ export default function SettingsPage() {
   const [autoWeight, setAutoWeight] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [copiedWebcal, setCopiedWebcal] = useState(false)
 
   useEffect(() => {
     async function loadProfiles() {
@@ -278,6 +279,40 @@ export default function SettingsPage() {
         >
           {saved ? '已儲存 ✓' : saving ? '儲存中...' : '儲存設定'}
         </Button>
+
+        {profile.calendar_token && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-blue-500" />
+                iPhone 行事曆訂閱
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-gray-500">
+                訂閱後，頻率事項的到期日會出現在行事曆與桌面小工具。每個使用者的連結各自獨立。
+              </p>
+              <p className="text-xs text-gray-400">
+                目前使用者：<span className="font-medium text-gray-600">{profile.display_name}</span>
+              </p>
+              <button
+                onClick={() => {
+                  const url = `webcal://${window.location.host}/api/calendar/${profile.calendar_token}`
+                  navigator.clipboard.writeText(url).then(() => {
+                    setCopiedWebcal(true)
+                    setTimeout(() => setCopiedWebcal(false), 2000)
+                  })
+                }}
+                className="w-full py-2.5 rounded-xl bg-blue-50 text-blue-600 text-sm font-medium hover:bg-blue-100 transition-colors"
+              >
+                {copiedWebcal ? '✓ 已複製連結' : '複製行事曆訂閱連結'}
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                iPhone：行事曆 app → 加入訂閱的行事曆 → 貼上連結
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Button variant="outline" onClick={handleLogout} className="w-full gap-2 text-gray-500">
           <LogOut className="h-4 w-4" />
