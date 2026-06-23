@@ -13,8 +13,10 @@ function formatDateTime(d: Date): string {
 
 export async function GET(
   _request: Request,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
+  const { token } = await params
+
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return new NextResponse('Server not configured', { status: 500 })
   }
@@ -27,7 +29,7 @@ export async function GET(
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, display_name')
-    .eq('calendar_token', params.token)
+    .eq('calendar_token', token)
     .single()
 
   if (!profile) {
