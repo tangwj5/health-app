@@ -7,7 +7,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { format, parseISO, subDays, addDays, differenceInDays } from 'date-fns'
+import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
 import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil } from 'lucide-react'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 
@@ -353,7 +353,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
     const now = new Date()
     const merged: TrackerItemWithLast[] = ((itemData as TrackerItem[]) || []).map(item => {
       const last = latestLog[item.id] ?? null
-      const daysSince = last ? differenceInDays(now, parseISO(last)) : null
+      const daysSince = last ? differenceInCalendarDays(now, parseISO(last)) : null
       return { ...item, lastCompletedAt: last, daysSince }
     })
     setItems(merged)
