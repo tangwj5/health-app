@@ -25,6 +25,21 @@ function nowLocalStr(): string {
   return toLocalDateTimeStr(new Date())
 }
 
+function computeHistoryStats(logs: TrackerLog[]) {
+  if (logs.length < 2) return null
+  const sorted = [...logs].sort((a, b) => a.completed_at.localeCompare(b.completed_at))
+  const intervals: number[] = []
+  for (let i = 1; i < sorted.length; i++) {
+    const diff = differenceInCalendarDays(parseISO(sorted[i].completed_at), parseISO(sorted[i - 1].completed_at))
+    if (diff > 0) intervals.push(diff)
+  }
+  if (intervals.length === 0) return null
+  const avgDays = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length)
+  const latest = sorted[sorted.length - 1]
+  const nextDue = addDays(parseISO(latest.completed_at), avgDays)
+  return { avgDays, nextDue }
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function TrackPage() {
@@ -698,6 +713,17 @@ function TrackerTab({ profile }: { profile: Profile }) {
                     ) : (itemHistory[item.id] || []).length === 0 ? (
                       <p className="text-xs text-gray-400 py-2">尚無完成記錄</p>
                     ) : (
+                      <>
+                        {(() => {
+                          const stats = computeHistoryStats(itemHistory[item.id] || [])
+                          if (!stats) return null
+                          return (
+                            <div className="mb-2 px-3 py-2 bg-blue-50 rounded-lg flex gap-4 text-xs">
+                              <span className="text-gray-500">平均 <span className="font-semibold text-gray-700">{stats.avgDays}</span> 天一次</span>
+                              <span className="text-gray-500">預估下次 <span className="font-semibold text-blue-600">{format(stats.nextDue, 'M/d')}</span></span>
+                            </div>
+                          )
+                        })()}
                       <div className="space-y-2 max-h-48 overflow-y-auto">
                         {(itemHistory[item.id] || []).map(log => (
                           <div key={log.id} className="text-xs">
@@ -734,6 +760,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                           </div>
                         ))}
                       </div>
+                      </>
                     )}
                   </div>
                 )}
