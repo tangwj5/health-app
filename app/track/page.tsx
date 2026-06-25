@@ -720,7 +720,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                           return (
                             <div className="mb-2 px-3 py-2 bg-blue-50 rounded-lg flex gap-4 text-xs">
                               <span className="text-gray-500">平均 <span className="font-semibold text-gray-700">{stats.avgDays}</span> 天一次</span>
-                              <span className="text-gray-500">預估下次 <span className="font-semibold text-blue-600">{format(stats.nextDue, 'M/d')}</span></span>
+                              <span className="text-gray-500">預估下次 <span className="font-semibold text-blue-600">{format(stats.nextDue, 'yyyy/M/d')}</span></span>
                             </div>
                           )
                         })()}
