@@ -194,7 +194,7 @@ function SchedulePicker({ value, onChange }: { value: ScheduleState; onChange: (
             onChange={e => onChange({ ...value, monthlyDateDay: e.target.value })}
             className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
           >
-            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+            {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
               <option key={d} value={d}>{d} 日</option>
             ))}
           </select>
@@ -243,7 +243,7 @@ function SchedulePicker({ value, onChange }: { value: ScheduleState; onChange: (
             onChange={e => onChange({ ...value, yearlyDay: e.target.value })}
             className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
           >
-            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+            {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
               <option key={d} value={d}>{d} 日</option>
             ))}
           </select>
