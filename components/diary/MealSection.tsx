@@ -14,6 +14,8 @@ interface Props {
   onDelete: (id: string) => void
   onEdit: (entry: MealEntry) => void
   onCopyYesterday: () => void
+  onCopyFromOther?: () => Promise<void>
+  otherProfileName?: string
   onAddEntry: () => void
   onRefresh: () => void
 }
@@ -26,10 +28,11 @@ const MEAL_ICONS: Record<MealType, string> = {
 }
 
 export function MealSection({
-  mealType, label, entries, onDelete, onEdit, onCopyYesterday, onAddEntry
+  mealType, label, entries, onDelete, onEdit, onCopyYesterday, onCopyFromOther, otherProfileName, onAddEntry
 }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const [copying, setCopying] = useState(false)
+  const [copyingOther, setCopyingOther] = useState(false)
 
   const total = entries.reduce((sum, e) => sum + e.calories, 0)
 
@@ -37,6 +40,13 @@ export function MealSection({
     setCopying(true)
     await onCopyYesterday()
     setCopying(false)
+  }
+
+  async function handleCopyFromOther() {
+    if (!onCopyFromOther) return
+    setCopyingOther(true)
+    await onCopyFromOther()
+    setCopyingOther(false)
   }
 
   return (
@@ -86,8 +96,20 @@ export function MealSection({
               className="h-8 text-xs gap-1 text-gray-500"
             >
               <Copy className="h-3.5 w-3.5" />
-              {copying ? '複製中...' : '複製昨日'}
+              {copying ? '複製中...' : '昨日'}
             </Button>
+            {onCopyFromOther && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyFromOther}
+                disabled={copyingOther}
+                className="h-8 text-xs gap-1 text-blue-500 border-blue-200 hover:bg-blue-50"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copyingOther ? '複製中...' : `複製${otherProfileName || '他人'}`}
+              </Button>
+            )}
           </div>
         </>
       )}

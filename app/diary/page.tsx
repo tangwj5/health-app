@@ -12,7 +12,7 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { EditEntryDialog } from '@/components/food/EditEntryDialog'
 import { WeeklyNutritionChart } from '@/components/diary/WeeklyNutritionChart'
-import { ChevronLeft, ChevronRight, Copy } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { MealEntry, MealType, Profile } from '@/types'
 
 const MEAL_TYPES: { key: MealType; label: string }[] = [
@@ -31,8 +31,7 @@ export default function DiaryPage() {
   const [profilesState, setProfilesState] = useState<'loading' | 'ready' | 'no-auth'>('loading')
   const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null)
   const [exerciseCalories, setExerciseCalories] = useState(0)
-  const [copyingFromOther, setCopyingFromOther] = useState(false)
-  const [copiedFromOther, setCopiedFromOther] = useState(false)
+  const [copyingFromOther, setCopyingFromOther] = useState<MealType | null>(null)
 
   useEffect(() => {
     loadProfiles()
@@ -77,17 +76,18 @@ export default function DiaryPage() {
     setExerciseCalories(total)
   }
 
-  async function copyFromOther() {
+  async function copyFromOtherMeal(mealType: MealType) {
     const profile = activeProfile()
     if (!profile || profiles.length < 2) return
     const otherProfile = profiles.find(p => p.id !== profile.id)
     if (!otherProfile) return
-    setCopyingFromOther(true)
+    setCopyingFromOther(mealType)
     const { data: otherEntries } = await supabase
       .from('meal_entries')
       .select('*')
       .eq('profile_id', otherProfile.id)
       .eq('log_date', selectedDate)
+      .eq('meal_type', mealType)
     if (otherEntries && otherEntries.length > 0) {
       const newEntries = otherEntries.map(({ id: _id, created_at: _ca, profile_id: _pid, ...rest }: MealEntry) => ({
         ...rest,
@@ -98,13 +98,9 @@ export default function DiaryPage() {
         .from('meal_entries')
         .insert(newEntries)
         .select('*, food:foods(*)')
-      if (data) {
-        setEntries(prev => [...prev, ...(data as MealEntry[])])
-        setCopiedFromOther(true)
-        setTimeout(() => setCopiedFromOther(false), 2500)
-      }
+      if (data) setEntries(prev => [...prev, ...(data as MealEntry[])])
     }
-    setCopyingFromOther(false)
+    setCopyingFromOther(null)
   }
 
   async function loadEntries() {
@@ -214,44 +210,27 @@ export default function DiaryPage() {
           />
         )}
 
-        {/* Copy from other profile */}
-        {profiles.length >= 2 && (() => {
-          const profile = activeProfile()
-          const otherProfile = profiles.find(p => p.id !== profile?.id)
-          if (!otherProfile) return null
-          return (
-            <div className="flex items-center justify-between bg-white rounded-2xl border px-4 py-2.5">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Copy className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                複製 <span className="font-medium text-gray-700">{otherProfile.display_name}</span> 今天的所有餐點
-              </div>
-              <button
-                onClick={copyFromOther}
-                disabled={copyingFromOther}
-                className="text-xs font-medium text-blue-500 hover:text-blue-600 disabled:opacity-50 shrink-0 ml-3"
-              >
-                {copiedFromOther ? '✓ 已複製' : copyingFromOther ? '複製中...' : '複製'}
-              </button>
-            </div>
-          )
-        })()}
-
         {/* Meal sections */}
-        {MEAL_TYPES.map(({ key, label }) => (
-          <MealSection
-            key={key}
-            mealType={key}
-            label={label}
-            entries={entries.filter(e => e.meal_type === key)}
-            profileId={profile?.id || ''}
-            selectedDate={selectedDate}
-            onDelete={deleteEntry}
-            onEdit={setEditingEntry}
-            onCopyYesterday={() => copyYesterday(key)}
-            onAddEntry={() => router.push(`/search?meal=${key}&date=${selectedDate}`)}
-            onRefresh={loadEntries}
-          />
-        ))}
+        {MEAL_TYPES.map(({ key, label }) => {
+          const otherProfile = profiles.length >= 2 ? profiles.find(p => p.id !== profile?.id) : undefined
+          return (
+            <MealSection
+              key={key}
+              mealType={key}
+              label={label}
+              entries={entries.filter(e => e.meal_type === key)}
+              profileId={profile?.id || ''}
+              selectedDate={selectedDate}
+              onDelete={deleteEntry}
+              onEdit={setEditingEntry}
+              onCopyYesterday={() => copyYesterday(key)}
+              onCopyFromOther={otherProfile ? () => copyFromOtherMeal(key) : undefined}
+              otherProfileName={otherProfile?.display_name}
+              onAddEntry={() => router.push(`/search?meal=${key}&date=${selectedDate}`)}
+              onRefresh={loadEntries}
+            />
+          )
+        })}
 
         {editingEntry && (
           <EditEntryDialog
