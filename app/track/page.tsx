@@ -63,7 +63,11 @@ function scheduleStateFromItem(item: TrackerItem): ScheduleState {
   return DEFAULT_SCHEDULE
 }
 
-function scheduleStateToSave(s: ScheduleState) {
+function scheduleStateToSave(s: ScheduleState): {
+  schedule_type: ScheduleType | null
+  schedule_config: ScheduleConfig | null
+  interval_days: number | null
+} {
   switch (s.mode) {
     case 'interval':
       return { schedule_type: null, schedule_config: null, interval_days: parseInt(s.intervalDays) || null }
@@ -561,7 +565,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
   async function saveItemEdit(id: string) {
     const schedSave = scheduleStateToSave(editSchedule)
     const updates = {
-      name: editItemData.name.trim() || undefined,
+      name: editItemData.name.trim(),
       category: editItemData.category || '其他',
       note: editItemData.note.trim() || null,
       ...schedSave,
