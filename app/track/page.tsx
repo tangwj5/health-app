@@ -9,13 +9,84 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
 import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil } from 'lucide-react'
-import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
+import { computeScheduleStatus, scheduleLabel, getNextOccurrence } from '@/lib/schedule'
+import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile, ScheduleType, ScheduleConfig } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
 type Tab = typeof TABS[number]
 
-// '開封' added for tracking skincare/consumable opening dates
 const PRESET_CATEGORIES = ['家事', '耗材', '保養', '開封', '旅遊', '健康', '其他']
+
+type ScheduleMode = 'none' | 'interval' | 'weekly' | 'monthly_date' | 'monthly_weekday' | 'yearly'
+
+interface ScheduleState {
+  mode: ScheduleMode
+  intervalDays: string
+  weeklyDays: number[]
+  monthlyDateDay: string
+  monthlyWeekdayWeek: string
+  monthlyWeekdayDay: string
+  yearlyMonth: string
+  yearlyDay: string
+}
+
+const DEFAULT_SCHEDULE: ScheduleState = {
+  mode: 'none', intervalDays: '', weeklyDays: [],
+  monthlyDateDay: '1', monthlyWeekdayWeek: '1', monthlyWeekdayDay: '1',
+  yearlyMonth: '1', yearlyDay: '1',
+}
+
+function scheduleStateFromItem(item: TrackerItem): ScheduleState {
+  if (item.schedule_type === 'weekly') {
+    return { ...DEFAULT_SCHEDULE, mode: 'weekly', weeklyDays: item.schedule_config?.days || [] }
+  }
+  if (item.schedule_type === 'monthly_date') {
+    return { ...DEFAULT_SCHEDULE, mode: 'monthly_date', monthlyDateDay: String(item.schedule_config?.day ?? 1) }
+  }
+  if (item.schedule_type === 'monthly_weekday') {
+    return {
+      ...DEFAULT_SCHEDULE, mode: 'monthly_weekday',
+      monthlyWeekdayWeek: String(item.schedule_config?.week ?? 1),
+      monthlyWeekdayDay: String(item.schedule_config?.day ?? 1),
+    }
+  }
+  if (item.schedule_type === 'yearly') {
+    return {
+      ...DEFAULT_SCHEDULE, mode: 'yearly',
+      yearlyMonth: String(item.schedule_config?.month ?? 1),
+      yearlyDay: String(item.schedule_config?.day ?? 1),
+    }
+  }
+  if (item.interval_days) {
+    return { ...DEFAULT_SCHEDULE, mode: 'interval', intervalDays: String(item.interval_days) }
+  }
+  return DEFAULT_SCHEDULE
+}
+
+function scheduleStateToSave(s: ScheduleState) {
+  switch (s.mode) {
+    case 'interval':
+      return { schedule_type: null, schedule_config: null, interval_days: parseInt(s.intervalDays) || null }
+    case 'weekly':
+      return { schedule_type: 'weekly', schedule_config: { days: s.weeklyDays }, interval_days: null }
+    case 'monthly_date':
+      return { schedule_type: 'monthly_date', schedule_config: { day: parseInt(s.monthlyDateDay) || 1 }, interval_days: null }
+    case 'monthly_weekday':
+      return {
+        schedule_type: 'monthly_weekday',
+        schedule_config: { week: parseInt(s.monthlyWeekdayWeek) || 1, day: parseInt(s.monthlyWeekdayDay) || 1 },
+        interval_days: null,
+      }
+    case 'yearly':
+      return {
+        schedule_type: 'yearly',
+        schedule_config: { month: parseInt(s.yearlyMonth) || 1, day: parseInt(s.yearlyDay) || 1 },
+        interval_days: null,
+      }
+    default:
+      return { schedule_type: null, schedule_config: null, interval_days: null }
+  }
+}
 
 function toLocalDateTimeStr(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -39,6 +110,143 @@ function computeHistoryStats(logs: TrackerLog[]) {
   const latest = sorted[sorted.length - 1]
   const nextDue = addDays(parseISO(latest.completed_at), avgDays)
   return { avgDays, nextDue }
+}
+
+// ─── Schedule Picker ──────────────────────────────────────────────────────────
+
+const DOW_LABELS = [
+  { day: 1, label: '一' }, { day: 2, label: '二' }, { day: 3, label: '三' },
+  { day: 4, label: '四' }, { day: 5, label: '五' }, { day: 6, label: '六' },
+  { day: 0, label: '日' },
+]
+
+const SCHEDULE_MODES: { value: ScheduleMode; label: string }[] = [
+  { value: 'none', label: '不提醒' },
+  { value: 'interval', label: '間隔N天' },
+  { value: 'weekly', label: '每週' },
+  { value: 'monthly_date', label: '每月日期' },
+  { value: 'monthly_weekday', label: '每月週序' },
+  { value: 'yearly', label: '每年' },
+]
+
+function SchedulePicker({ value, onChange }: { value: ScheduleState; onChange: (s: ScheduleState) => void }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500">提醒排程</p>
+      <div className="flex flex-wrap gap-1.5">
+        {SCHEDULE_MODES.map(m => (
+          <button
+            key={m.value}
+            onClick={() => onChange({ ...value, mode: m.value })}
+            className={`px-2.5 py-1 rounded-full text-xs border font-medium transition-colors ${
+              value.mode === m.value ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {value.mode === 'interval' && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">每</span>
+          <input
+            type="number" min="1"
+            value={value.intervalDays}
+            onChange={e => onChange({ ...value, intervalDays: e.target.value })}
+            className="w-16 border rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-1 focus:ring-green-400"
+            placeholder="N"
+          />
+          <span className="text-xs text-gray-500">天</span>
+        </div>
+      )}
+
+      {value.mode === 'weekly' && (
+        <div className="flex gap-1.5 flex-wrap">
+          {DOW_LABELS.map(({ day, label }) => (
+            <button
+              key={day}
+              onClick={() => {
+                const days = value.weeklyDays.includes(day)
+                  ? value.weeklyDays.filter(d => d !== day)
+                  : [...value.weeklyDays, day]
+                onChange({ ...value, weeklyDays: days })
+              }}
+              className={`w-9 h-9 rounded-full text-xs border font-medium transition-colors ${
+                value.weeklyDays.includes(day) ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {value.mode === 'monthly_date' && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">每月</span>
+          <select
+            value={value.monthlyDateDay}
+            onChange={e => onChange({ ...value, monthlyDateDay: e.target.value })}
+            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+              <option key={d} value={d}>{d} 日</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {value.mode === 'monthly_weekday' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">每月第</span>
+          <select
+            value={value.monthlyWeekdayWeek}
+            onChange={e => onChange({ ...value, monthlyWeekdayWeek: e.target.value })}
+            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+          >
+            {[['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['-1', '末']].map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
+          <span className="text-xs text-gray-500">個</span>
+          <select
+            value={value.monthlyWeekdayDay}
+            onChange={e => onChange({ ...value, monthlyWeekdayDay: e.target.value })}
+            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+          >
+            {DOW_LABELS.map(({ day, label }) => (
+              <option key={day} value={day}>週{label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {value.mode === 'yearly' && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">每年</span>
+          <select
+            value={value.yearlyMonth}
+            onChange={e => onChange({ ...value, yearlyMonth: e.target.value })}
+            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+          >
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+              <option key={m} value={m}>{m} 月</option>
+            ))}
+          </select>
+          <select
+            value={value.yearlyDay}
+            onChange={e => onChange({ ...value, yearlyDay: e.target.value })}
+            className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
+          >
+            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+              <option key={d} value={d}>{d} 日</option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -140,22 +348,15 @@ function HabitTab({ profile }: { profile: Profile }) {
 
   const loadHabits = useCallback(async () => {
     const { data } = await supabase
-      .from('habits')
-      .select('*')
-      .eq('profile_id', profile.id)
-      .eq('is_active', true)
-      .order('sort_order')
-      .order('created_at')
+      .from('habits').select('*').eq('profile_id', profile.id).eq('is_active', true)
+      .order('sort_order').order('created_at')
     setHabits((data as Habit[]) || [])
   }, [profile.id])
 
   const loadLogs = useCallback(async () => {
     const since = format(gridStart, 'yyyy-MM-dd')
     const { data } = await supabase
-      .from('habit_logs')
-      .select('*')
-      .eq('profile_id', profile.id)
-      .gte('logged_date', since)
+      .from('habit_logs').select('*').eq('profile_id', profile.id).gte('logged_date', since)
     setLogs((data as HabitLog[]) || [])
   }, [profile.id])
 
@@ -169,16 +370,9 @@ function HabitTab({ profile }: { profile: Profile }) {
     const done = todayDone(habit.id)
     if (done) {
       const log = logs.find(l => l.habit_id === habit.id && l.logged_date === today)
-      if (log) {
-        await supabase.from('habit_logs').delete().eq('id', log.id)
-        setLogs(ls => ls.filter(l => l.id !== log.id))
-      }
+      if (log) { await supabase.from('habit_logs').delete().eq('id', log.id); setLogs(ls => ls.filter(l => l.id !== log.id)) }
     } else {
-      const { data } = await supabase.from('habit_logs').insert({
-        habit_id: habit.id,
-        profile_id: profile.id,
-        logged_date: today,
-      }).select().single()
+      const { data } = await supabase.from('habit_logs').insert({ habit_id: habit.id, profile_id: profile.id, logged_date: today }).select().single()
       if (data) setLogs(ls => [...ls, data as HabitLog])
     }
     setToggling(s => { const ns = new Set(s); ns.delete(habit.id); return ns })
@@ -187,25 +381,17 @@ function HabitTab({ profile }: { profile: Profile }) {
   async function addHabit() {
     if (!newName.trim()) return
     setAdding(true)
-    const { data } = await supabase.from('habits').insert({
-      profile_id: profile.id,
-      name: newName.trim(),
-      sort_order: habits.length,
-    }).select().single()
+    const { data } = await supabase.from('habits').insert({ profile_id: profile.id, name: newName.trim(), sort_order: habits.length }).select().single()
     if (data) setHabits(h => [...h, data as Habit])
     setNewName(''); setShowAdd(false); setAdding(false)
   }
 
   async function deleteHabit(id: string) {
     await supabase.from('habits').update({ is_active: false }).eq('id', id)
-    setHabits(h => h.filter(x => x.id !== id))
-    setDeleteConfirm(null)
+    setHabits(h => h.filter(x => x.id !== id)); setDeleteConfirm(null)
   }
 
-  const gridDays = Array.from({ length: GRID_DAYS }, (_, i) =>
-    format(addDays(gridStart, i), 'yyyy-MM-dd')
-  )
-
+  const gridDays = Array.from({ length: GRID_DAYS }, (_, i) => format(addDays(gridStart, i), 'yyyy-MM-dd'))
   const DOW = ['一', '二', '三', '四', '五', '六', '日']
 
   return (
@@ -213,9 +399,7 @@ function HabitTab({ profile }: { profile: Profile }) {
       <div className="bg-white rounded-2xl border p-4">
         <p className="text-sm font-semibold text-gray-700 mb-3">
           今天 {format(new Date(), 'M/d')}
-          <span className="ml-2 text-xs text-gray-400">
-            {habits.filter(h => todayDone(h.id)).length}/{habits.length} 完成
-          </span>
+          <span className="ml-2 text-xs text-gray-400">{habits.filter(h => todayDone(h.id)).length}/{habits.length} 完成</span>
         </p>
         {habits.length === 0 ? (
           <p className="text-sm text-gray-400 py-4 text-center">還沒有習慣，點下方新增</p>
@@ -226,52 +410,32 @@ function HabitTab({ profile }: { profile: Profile }) {
               const busy = toggling.has(h.id)
               return (
                 <div key={h.id} className="flex items-center gap-3">
-                  <button
-                    onClick={() => !busy && toggleToday(h)}
-                    disabled={busy}
-                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                      done ? 'border-green-500 bg-green-500' : 'border-gray-300 bg-white'
-                    }`}
-                  >
+                  <button onClick={() => !busy && toggleToday(h)} disabled={busy}
+                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${done ? 'border-green-500 bg-green-500' : 'border-gray-300 bg-white'}`}>
                     {done && <Check className="h-4 w-4 text-white" />}
                   </button>
-                  <span className={`flex-1 text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                    {h.name}
-                  </span>
+                  <span className={`flex-1 text-sm ${done ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{h.name}</span>
                   {deleteConfirm === h.id ? (
                     <div className="flex gap-1.5">
                       <button onClick={() => deleteHabit(h.id)} className="text-xs text-red-500 px-2 py-0.5 rounded border border-red-200">刪除</button>
                       <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
                     </div>
                   ) : (
-                    <button onClick={() => setDeleteConfirm(h.id)} className="text-gray-300 hover:text-gray-400 p-1">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
+                    <button onClick={() => setDeleteConfirm(h.id)} className="text-gray-300 hover:text-gray-400 p-1"><X className="h-3.5 w-3.5" /></button>
                   )}
                 </div>
               )
             })}
           </div>
         )}
-
         {showAdd ? (
           <div className="mt-3 flex gap-2">
-            <Input
-              autoFocus
-              placeholder="習慣名稱"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addHabit()}
-              className="flex-1 h-8 text-sm"
-            />
+            <Input autoFocus placeholder="習慣名稱" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addHabit()} className="flex-1 h-8 text-sm" />
             <Button onClick={addHabit} disabled={adding || !newName.trim()} className="h-8 px-3 bg-green-500 hover:bg-green-600 text-xs">新增</Button>
             <Button variant="outline" onClick={() => { setShowAdd(false); setNewName('') }} className="h-8 px-3 text-xs">取消</Button>
           </div>
         ) : (
-          <button
-            onClick={() => setShowAdd(true)}
-            className="mt-3 flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 transition-colors"
-          >
+          <button onClick={() => setShowAdd(true)} className="mt-3 flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 transition-colors">
             <Plus className="h-3.5 w-3.5" />新增習慣
           </button>
         )}
@@ -287,8 +451,7 @@ function HabitTab({ profile }: { profile: Profile }) {
             let streak = 0
             for (let i = 0; i < GRID_DAYS; i++) {
               const d = format(subDays(todayDate, i), 'yyyy-MM-dd')
-              if (logSet.has(`${h.id}:${d}`)) streak++
-              else break
+              if (logSet.has(`${h.id}:${d}`)) streak++; else break
             }
             return (
               <div key={h.id} className="bg-white rounded-2xl border p-4">
@@ -299,26 +462,13 @@ function HabitTab({ profile }: { profile: Profile }) {
                     <span>連續 <span className="font-semibold text-gray-700">{streak}</span> 天</span>
                   </div>
                 </div>
-                <div>
-                  <div className="grid grid-cols-7 gap-0.5 mb-0.5">
-                    {DOW.map(d => (
-                      <div key={d} className="text-center text-xs text-gray-300">{d}</div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-0.5">
-                    {gridDays.map(d => (
-                      <div
-                        key={d}
-                        title={d}
-                        className={`h-5 rounded-sm ${
-                          d > today ? 'bg-transparent' :
-                          logSet.has(`${h.id}:${d}`) ? 'bg-green-500' :
-                          d === today ? 'bg-gray-200 ring-1 ring-gray-400' :
-                          'bg-gray-100'
-                        }`}
-                      />
-                    ))}
-                  </div>
+                <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+                  {DOW.map(d => <div key={d} className="text-center text-xs text-gray-300">{d}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-0.5">
+                  {gridDays.map(d => (
+                    <div key={d} title={d} className={`h-5 rounded-sm ${d > today ? 'bg-transparent' : logSet.has(`${h.id}:${d}`) ? 'bg-green-500' : d === today ? 'bg-gray-200 ring-1 ring-gray-400' : 'bg-gray-100'}`} />
+                  ))}
                 </div>
               </div>
             )
@@ -353,12 +503,13 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [editingLog, setEditingLog] = useState<string | null>(null)
   const [editingLogAt, setEditingLogAt] = useState('')
   const [showAdd, setShowAdd] = useState(false)
-  const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '', note: '' })
+  const [newItem, setNewItem] = useState({ name: '', category: '其他', note: '' })
+  const [newSchedule, setNewSchedule] = useState<ScheduleState>(DEFAULT_SCHEDULE)
   const [adding, setAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  // item editing state
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
-  const [editItemData, setEditItemData] = useState({ name: '', category: '', interval_days: '', note: '' })
+  const [editItemData, setEditItemData] = useState({ name: '', category: '', note: '' })
+  const [editSchedule, setEditSchedule] = useState<ScheduleState>(DEFAULT_SCHEDULE)
 
   const loadData = useCallback(async () => {
     const [{ data: itemData }, { data: logData }] = await Promise.all([
@@ -382,11 +533,9 @@ function TrackerTab({ profile }: { profile: Profile }) {
 
   async function completeItem(id: string, note: string, completedAt: string) {
     setCompleting(s => new Set(s).add(id))
-    setConfirmingItem(null)
-    setConfirmNote('')
+    setConfirmingItem(null); setConfirmNote('')
     const { data } = await supabase.from('tracker_logs').insert({
-      item_id: id,
-      profile_id: profile.id,
+      item_id: id, profile_id: profile.id,
       completed_at: new Date(completedAt).toISOString(),
       note: note.trim() || null,
     }).select().single()
@@ -402,25 +551,20 @@ function TrackerTab({ profile }: { profile: Profile }) {
   }
 
   async function saveLogEdit(logId: string, itemId: string) {
-    const isoAt = new Date(editingLogAt).toISOString()
-    await supabase.from('tracker_logs').update({ completed_at: isoAt }).eq('id', logId)
+    await supabase.from('tracker_logs').update({ completed_at: new Date(editingLogAt).toISOString() }).eq('id', logId)
     setEditingLog(null)
-    const { data } = await supabase
-      .from('tracker_logs')
-      .select('*')
-      .eq('item_id', itemId)
-      .order('completed_at', { ascending: false })
-      .limit(30)
+    const { data } = await supabase.from('tracker_logs').select('*').eq('item_id', itemId).order('completed_at', { ascending: false }).limit(30)
     setItemHistory(prev => ({ ...prev, [itemId]: (data as TrackerLog[]) || [] }))
     loadData()
   }
 
   async function saveItemEdit(id: string) {
+    const schedSave = scheduleStateToSave(editSchedule)
     const updates = {
       name: editItemData.name.trim() || undefined,
       category: editItemData.category || '其他',
-      interval_days: editItemData.interval_days ? parseInt(editItemData.interval_days) : null,
       note: editItemData.note.trim() || null,
+      ...schedSave,
     }
     await supabase.from('tracker_items').update(updates).eq('id', id)
     setItems(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item))
@@ -432,37 +576,31 @@ function TrackerTab({ profile }: { profile: Profile }) {
     setHistoryItem(id)
     if (itemHistory[id]) return
     setLoadingHistory(id)
-    const { data } = await supabase
-      .from('tracker_logs')
-      .select('*')
-      .eq('item_id', id)
-      .order('completed_at', { ascending: false })
-      .limit(30)
+    const { data } = await supabase.from('tracker_logs').select('*').eq('item_id', id).order('completed_at', { ascending: false }).limit(30)
     setItemHistory(prev => ({ ...prev, [id]: (data as TrackerLog[]) || [] }))
     setLoadingHistory(null)
   }
 
   async function deleteItem(id: string) {
     await supabase.from('tracker_items').update({ is_active: false }).eq('id', id)
-    setItems(prev => prev.filter(x => x.id !== id))
-    setDeleteConfirm(null)
+    setItems(prev => prev.filter(x => x.id !== id)); setDeleteConfirm(null)
   }
 
   async function addItem() {
     if (!newItem.name.trim()) return
     setAdding(true)
+    const schedSave = scheduleStateToSave(newSchedule)
     const { data } = await supabase.from('tracker_items').insert({
       profile_id: profile.id,
       name: newItem.name.trim(),
       category: newItem.category || '其他',
-      interval_days: newItem.interval_days ? parseInt(newItem.interval_days) : null,
       note: newItem.note.trim() || null,
       sort_order: items.length,
+      ...schedSave,
     }).select().single()
-    if (data) {
-      setItems(prev => [...prev, { ...(data as TrackerItem), lastCompletedAt: null, daysSince: null }])
-    }
-    setNewItem({ name: '', category: '其他', interval_days: '', note: '' })
+    if (data) setItems(prev => [...prev, { ...(data as TrackerItem), lastCompletedAt: null, daysSince: null }])
+    setNewItem({ name: '', category: '其他', note: '' })
+    setNewSchedule(DEFAULT_SCHEDULE)
     setShowAdd(false); setAdding(false)
   }
 
@@ -471,27 +609,33 @@ function TrackerTab({ profile }: { profile: Profile }) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, is_pinned: !current } : item))
   }
 
+  function itemSortKey(item: TrackerItemWithLast): number {
+    if (item.schedule_type) {
+      const status = computeScheduleStatus(
+        item.schedule_type as ScheduleType,
+        (item.schedule_config as ScheduleConfig) || {},
+        item.lastCompletedAt,
+        new Date(),
+      )
+      return status.daysUntilDue  // negative = overdue (sorts first)
+    }
+    if (item.interval_days != null && item.daysSince != null) {
+      return item.daysSince - item.interval_days  // negative = not yet overdue, positive = overdue
+    }
+    return -(item.daysSince ?? 0)  // more days since = sort earlier
+  }
+
   const sortedItems = [...items].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1
-    if (!a.is_pinned && b.is_pinned) return 1
-    const aOverdue = a.interval_days != null && a.daysSince != null && a.daysSince > a.interval_days
-    const bOverdue = b.interval_days != null && b.daysSince != null && b.daysSince > b.interval_days
-    if (aOverdue && !bOverdue) return -1
-    if (!aOverdue && bOverdue) return 1
-    const aDays = a.daysSince ?? 9999
-    const bDays = b.daysSince ?? 9999
-    return bDays - aDays
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+    return itemSortKey(a) - itemSortKey(b)
   })
 
-  // category filter includes presets in use + any custom categories in use
   const usedCategories = [...new Set(items.map(i => i.category))]
   const orderedCategories = [
     ...PRESET_CATEGORIES.filter(c => usedCategories.includes(c)),
     ...usedCategories.filter(c => !PRESET_CATEGORIES.includes(c)),
   ]
   const categories = ['全部', ...orderedCategories]
-
-  // custom categories already used (shown as extra chips in the add/edit form)
   const customCategoriesInUse = usedCategories.filter(c => !PRESET_CATEGORIES.includes(c))
 
   const filtered = sortedItems.filter(item => {
@@ -500,7 +644,20 @@ function TrackerTab({ profile }: { profile: Profile }) {
     return catMatch && queryMatch
   })
 
-  function urgencyLabel(item: TrackerItemWithLast) {
+  function urgencyLabel(item: TrackerItemWithLast): { text: string; color: string } {
+    if (item.schedule_type) {
+      const status = computeScheduleStatus(
+        item.schedule_type as ScheduleType,
+        (item.schedule_config as ScheduleConfig) || {},
+        item.lastCompletedAt,
+        new Date(),
+      )
+      if (status.overdueBy != null && status.overdueBy > 0) return { text: `逾期 ${status.overdueBy} 天`, color: 'text-red-500' }
+      if (status.daysUntilDue === 0) return { text: '今天', color: 'text-green-600' }
+      if (status.daysUntilDue <= 3) return { text: `${status.daysUntilDue} 天後`, color: 'text-orange-500' }
+      if (!item.lastCompletedAt) return { text: '從未記錄', color: 'text-gray-400' }
+      return { text: `${status.daysUntilDue} 天後`, color: 'text-gray-400' }
+    }
     if (item.daysSince === null) return { text: '從未記錄', color: 'text-gray-400' }
     if (item.daysSince === 0) return { text: '今天', color: 'text-green-600' }
     if (item.interval_days != null) {
@@ -512,10 +669,16 @@ function TrackerTab({ profile }: { profile: Profile }) {
     return { text: `${item.daysSince} 天前`, color: 'text-gray-500' }
   }
 
-  // whether the typed category in the add form is a custom (non-preset) value
-  const isCustomCategory = !PRESET_CATEGORIES.includes(newItem.category) && !customCategoriesInUse.includes(newItem.category)
+  function scheduleDisplay(item: TrackerItem): string | null {
+    if (item.schedule_type) {
+      return scheduleLabel(item.schedule_type as ScheduleType, (item.schedule_config as ScheduleConfig) || {})
+    }
+    if (item.interval_days) return `每 ${item.interval_days} 天`
+    return null
+  }
 
-  // today's completions for the summary card
+  const isNewCustomCategory = !PRESET_CATEGORIES.includes(newItem.category) && !customCategoriesInUse.includes(newItem.category)
+  const isEditCustomCategory = !PRESET_CATEGORIES.includes(editItemData.category) && !customCategoriesInUse.includes(editItemData.category)
   const todayCompletedItems = sortedItems.filter(i => i.daysSince === 0)
 
   return (
@@ -523,20 +686,13 @@ function TrackerTab({ profile }: { profile: Profile }) {
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="搜尋事項..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          className="pl-9 bg-white"
-        />
+        <Input placeholder="搜尋事項..." value={query} onChange={e => setQuery(e.target.value)} className="pl-9 bg-white" />
       </div>
 
       {/* Category chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {categories.map(c => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
+          <button key={c} onClick={() => setCategory(c)}
             className={`shrink-0 px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
               category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500 bg-white'
             }`}
@@ -550,8 +706,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
       {todayCompletedItems.length > 0 && (
         <div className="bg-green-50 border border-green-100 rounded-2xl px-4 py-3">
           <p className="text-xs font-semibold text-green-700 mb-2 flex items-center gap-1.5">
-            <Check className="h-3.5 w-3.5" />
-            今日完成（{todayCompletedItems.length}）
+            <Check className="h-3.5 w-3.5" />今日完成（{todayCompletedItems.length}）
           </p>
           <div className="space-y-1.5">
             {todayCompletedItems.map(item => (
@@ -559,9 +714,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                 <span className="text-xs text-gray-800 flex-1">{item.name}</span>
                 <span className="text-xs text-gray-400 bg-white rounded-full px-2 py-0.5 border border-gray-100">{item.category}</span>
                 {item.lastCompletedAt && (
-                  <span className="text-xs text-gray-400 tabular-nums">
-                    {format(parseISO(item.lastCompletedAt), 'HH:mm')}
-                  </span>
+                  <span className="text-xs text-gray-400 tabular-nums">{format(parseISO(item.lastCompletedAt), 'HH:mm')}</span>
                 )}
               </div>
             ))}
@@ -569,26 +722,17 @@ function TrackerTab({ profile }: { profile: Profile }) {
         </div>
       )}
 
-      {/* Add item — placed at top */}
+      {/* Add item */}
       {showAdd ? (
         <div className="bg-white rounded-2xl border p-4 space-y-3">
           <p className="text-sm font-semibold text-gray-700">新增事項</p>
-          <Input
-            autoFocus
-            placeholder="事項名稱"
-            value={newItem.name}
-            onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))}
-          />
+          <Input autoFocus placeholder="事項名稱" value={newItem.name} onChange={e => setNewItem(p => ({ ...p, name: e.target.value }))} />
           <div className="space-y-2">
             <p className="text-xs text-gray-500">分類</p>
             <div className="flex flex-wrap gap-2">
               {[...PRESET_CATEGORIES, ...customCategoriesInUse].map(c => (
-                <button
-                  key={c}
-                  onClick={() => setNewItem(p => ({ ...p, category: c }))}
-                  className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
-                    newItem.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
-                  }`}
+                <button key={c} onClick={() => setNewItem(p => ({ ...p, category: c }))}
+                  className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${newItem.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'}`}
                 >
                   {c}
                 </button>
@@ -596,24 +740,12 @@ function TrackerTab({ profile }: { profile: Profile }) {
             </div>
             <Input
               placeholder="或輸入自訂分類..."
-              value={isCustomCategory ? newItem.category : ''}
-              onChange={e => {
-                const val = e.target.value
-                setNewItem(p => ({ ...p, category: val || '其他' }))
-              }}
+              value={isNewCustomCategory ? newItem.category : ''}
+              onChange={e => setNewItem(p => ({ ...p, category: e.target.value || '其他' }))}
               className="h-8 text-sm"
             />
           </div>
-          <div className="space-y-1">
-            <p className="text-xs text-gray-500">提醒週期（天，選填）</p>
-            <Input
-              type="number" min="1"
-              placeholder="例：90（每90天）"
-              value={newItem.interval_days}
-              onChange={e => setNewItem(p => ({ ...p, interval_days: e.target.value }))}
-            />
-            <p className="text-xs text-gray-400">留空則只記錄頻率，不提醒到期</p>
-          </div>
+          <SchedulePicker value={newSchedule} onChange={setNewSchedule} />
           <div className="space-y-1">
             <p className="text-xs text-gray-500">備註（選填）</p>
             <textarea
@@ -654,7 +786,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
             const isConfirming = confirmingItem === item.id
             const isShowingHistory = historyItem === item.id
             const isEditingItem = editingItemId === item.id
-            const isEditCustom = !PRESET_CATEGORIES.includes(editItemData.category) && !customCategoriesInUse.includes(editItemData.category)
+            const schedDisp = scheduleDisplay(item)
             return (
               <div key={item.id} className="bg-white rounded-2xl border p-4">
                 <div className="flex items-start gap-3">
@@ -662,14 +794,12 @@ function TrackerTab({ profile }: { profile: Profile }) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-medium text-gray-800">{item.name}</span>
                       <span className="text-xs bg-gray-100 text-gray-500 rounded-full px-2 py-0.5">{item.category}</span>
-                      {item.interval_days && (
-                        <span className="text-xs text-gray-400">每 {item.interval_days} 天</span>
-                      )}
+                      {schedDisp && <span className="text-xs text-gray-400">{schedDisp}</span>}
                     </div>
                     <p className={`text-xs mt-0.5 ${urgColor}`}>{urgText}</p>
                     {item.note && <p className="text-xs text-gray-400 mt-1">{item.note}</p>}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {deleteConfirm === item.id ? (
                       <div className="flex gap-1.5">
                         <button onClick={() => deleteItem(item.id)} className="text-xs text-red-500 px-2 py-0.5 rounded border border-red-200">刪除</button>
@@ -682,23 +812,17 @@ function TrackerTab({ profile }: { profile: Profile }) {
                         <button
                           onClick={() => {
                             setEditingItemId(item.id)
-                            setEditItemData({
-                              name: item.name,
-                              category: item.category,
-                              interval_days: item.interval_days?.toString() ?? '',
-                              note: item.note ?? '',
-                            })
+                            setEditItemData({ name: item.name, category: item.category, note: item.note ?? '' })
+                            setEditSchedule(scheduleStateFromItem(item))
                             setHistoryItem(null)
                           }}
-                          className="text-gray-300 hover:text-blue-400 p-1 transition-colors"
-                          title="編輯"
+                          className="text-gray-300 hover:text-blue-400 p-1 transition-colors" title="編輯"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
                           onClick={() => togglePin(item.id, item.is_pinned)}
                           className={`p-1 rounded transition-colors ${item.is_pinned ? 'text-orange-400' : 'text-gray-300 hover:text-orange-300'}`}
-                          title={item.is_pinned ? '取消置頂' : '置頂常用'}
                         >
                           <Pin className="h-3.5 w-3.5" />
                         </button>
@@ -720,22 +844,13 @@ function TrackerTab({ profile }: { profile: Profile }) {
                 {/* Inline edit form */}
                 {isEditingItem && (
                   <div className="mt-3 pt-3 border-t space-y-3">
-                    <Input
-                      autoFocus
-                      placeholder="事項名稱"
-                      value={editItemData.name}
-                      onChange={e => setEditItemData(p => ({ ...p, name: e.target.value }))}
-                    />
+                    <Input autoFocus placeholder="事項名稱" value={editItemData.name} onChange={e => setEditItemData(p => ({ ...p, name: e.target.value }))} />
                     <div className="space-y-2">
                       <p className="text-xs text-gray-500">分類</p>
                       <div className="flex flex-wrap gap-2">
                         {[...PRESET_CATEGORIES, ...customCategoriesInUse].map(c => (
-                          <button
-                            key={c}
-                            onClick={() => setEditItemData(p => ({ ...p, category: c }))}
-                            className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
-                              editItemData.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
-                            }`}
+                          <button key={c} onClick={() => setEditItemData(p => ({ ...p, category: c }))}
+                            className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${editItemData.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'}`}
                           >
                             {c}
                           </button>
@@ -743,27 +858,15 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       </div>
                       <Input
                         placeholder="或輸入自訂分類..."
-                        value={isEditCustom ? editItemData.category : ''}
-                        onChange={e => {
-                          const val = e.target.value
-                          setEditItemData(p => ({ ...p, category: val || '其他' }))
-                        }}
+                        value={isEditCustomCategory ? editItemData.category : ''}
+                        onChange={e => setEditItemData(p => ({ ...p, category: e.target.value || '其他' }))}
                         className="h-8 text-sm"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-gray-500">提醒週期（天，選填）</p>
-                      <Input
-                        type="number" min="1"
-                        placeholder="例：90"
-                        value={editItemData.interval_days}
-                        onChange={e => setEditItemData(p => ({ ...p, interval_days: e.target.value }))}
-                      />
-                    </div>
+                    <SchedulePicker value={editSchedule} onChange={setEditSchedule} />
                     <div className="space-y-1">
                       <p className="text-xs text-gray-500">備註（選填）</p>
                       <textarea
-                        placeholder="注意事項..."
                         value={editItemData.note}
                         onChange={e => setEditItemData(p => ({ ...p, note: e.target.value }))}
                         rows={2}
@@ -771,65 +874,37 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => saveItemEdit(item.id)}
-                        className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium"
-                      >
-                        儲存
-                      </button>
-                      <button
-                        onClick={() => setEditingItemId(null)}
-                        className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500"
-                      >
-                        取消
-                      </button>
+                      <button onClick={() => saveItemEdit(item.id)} className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium">儲存</button>
+                      <button onClick={() => setEditingItemId(null)} className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500">取消</button>
                     </div>
                   </div>
                 )}
 
-                {/* Inline confirm with time + note */}
+                {/* Inline confirm */}
                 {isConfirming && (
                   <div className="mt-3 pt-3 border-t space-y-2">
                     <div className="space-y-1">
                       <p className="text-xs text-gray-400">完成時間</p>
-                      <input
-                        type="datetime-local"
-                        value={confirmAt}
-                        onChange={e => setConfirmAt(e.target.value)}
-                        className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400"
-                      />
+                      <input type="datetime-local" value={confirmAt} onChange={e => setConfirmAt(e.target.value)}
+                        className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-400" />
                     </div>
-                    <Input
-                      autoFocus
-                      placeholder="備註（選填），按 Enter 確認"
-                      value={confirmNote}
+                    <Input autoFocus placeholder="備註（選填），按 Enter 確認" value={confirmNote}
                       onChange={e => setConfirmNote(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && completeItem(item.id, confirmNote, confirmAt)}
-                      className="text-sm h-8"
-                    />
+                      className="text-sm h-8" />
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => completeItem(item.id, confirmNote, confirmAt)}
-                        className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium"
-                      >
-                        確認完成
-                      </button>
-                      <button
-                        onClick={() => { setConfirmingItem(null); setConfirmNote('') }}
-                        className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500"
-                      >
-                        取消
-                      </button>
+                      <button onClick={() => completeItem(item.id, confirmNote, confirmAt)}
+                        className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium">確認完成</button>
+                      <button onClick={() => { setConfirmingItem(null); setConfirmNote('') }}
+                        className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500">取消</button>
                     </div>
                   </div>
                 )}
 
                 {/* History toggle */}
                 {!isConfirming && !isEditingItem && (
-                  <button
-                    onClick={() => toggleHistory(item.id)}
-                    className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                  >
+                  <button onClick={() => toggleHistory(item.id)}
+                    className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
                     {isShowingHistory ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                     歷史記錄
                   </button>
@@ -854,42 +929,33 @@ function TrackerTab({ profile }: { profile: Profile }) {
                             </div>
                           )
                         })()}
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {(itemHistory[item.id] || []).map(log => (
-                          <div key={log.id} className="text-xs">
-                            {editingLog === log.id ? (
-                              <div className="space-y-1.5 py-1">
-                                <input
-                                  type="datetime-local"
-                                  value={editingLogAt}
-                                  onChange={e => setEditingLogAt(e.target.value)}
-                                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"
-                                />
-                                <div className="flex gap-1.5">
-                                  <button onClick={() => saveLogEdit(log.id, item.id)} className="text-xs text-green-600 px-2 py-0.5 rounded border border-green-200">儲存</button>
-                                  <button onClick={() => setEditingLog(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {(itemHistory[item.id] || []).map(log => (
+                            <div key={log.id} className="text-xs">
+                              {editingLog === log.id ? (
+                                <div className="space-y-1.5 py-1">
+                                  <input type="datetime-local" value={editingLogAt} onChange={e => setEditingLogAt(e.target.value)}
+                                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
+                                  <div className="flex gap-1.5">
+                                    <button onClick={() => saveLogEdit(log.id, item.id)} className="text-xs text-green-600 px-2 py-0.5 rounded border border-green-200">儲存</button>
+                                    <button onClick={() => setEditingLog(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
+                                  </div>
                                 </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-start gap-2">
-                                <span className="text-gray-400 shrink-0 w-28">
-                                  {format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}
-                                </span>
-                                {log.note && <span className="text-gray-600 flex-1">{log.note}</span>}
-                                <button
-                                  onClick={() => {
-                                    setEditingLog(log.id)
-                                    setEditingLogAt(toLocalDateTimeStr(parseISO(log.completed_at)))
-                                  }}
-                                  className="text-gray-300 hover:text-gray-500 p-0.5 shrink-0 ml-auto"
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                              ) : (
+                                <div className="flex items-start gap-2">
+                                  <span className="text-gray-400 shrink-0 w-28">{format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}</span>
+                                  {log.note && <span className="text-gray-600 flex-1">{log.note}</span>}
+                                  <button
+                                    onClick={() => { setEditingLog(log.id); setEditingLogAt(toLocalDateTimeStr(parseISO(log.completed_at))) }}
+                                    className="text-gray-300 hover:text-gray-500 p-0.5 shrink-0 ml-auto"
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </>
                     )}
                   </div>
@@ -899,7 +965,6 @@ function TrackerTab({ profile }: { profile: Profile }) {
           })}
         </div>
       )}
-
     </div>
   )
 }

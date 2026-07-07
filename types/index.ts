@@ -124,12 +124,23 @@ export interface HabitLog {
   created_at: string
 }
 
+export type ScheduleType = 'weekly' | 'monthly_date' | 'monthly_weekday' | 'yearly'
+
+export interface ScheduleConfig {
+  days?: number[]   // weekly: day-of-week array, 0=Sun 1=Mon … 6=Sat
+  day?: number      // monthly_date: 1-31; monthly_weekday: weekday 0-6; yearly: 1-31
+  week?: number     // monthly_weekday: 1-4 or -1 (last)
+  month?: number    // yearly: 1-12
+}
+
 export interface TrackerItem {
   id: string
   profile_id: string
   name: string
   category: string
   interval_days: number | null
+  schedule_type: ScheduleType | null
+  schedule_config: ScheduleConfig | null
   note: string | null
   is_active: boolean
   is_pinned: boolean

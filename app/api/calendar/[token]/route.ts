@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { scheduleToRRule, getNextOccurrence } from '@/lib/schedule'
+import type { ScheduleType, ScheduleConfig } from '@/types'
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
@@ -40,10 +42,9 @@ export async function GET(
   const [{ data: items }, { data: logs }] = await Promise.all([
     supabase
       .from('tracker_items')
-      .select('id, name, note, interval_days')
+      .select('id, name, note, interval_days, schedule_type, schedule_config')
       .eq('profile_id', profile.id)
-      .eq('is_active', true)
-      .not('interval_days', 'is', null),
+      .eq('is_active', true),
     supabase
       .from('tracker_logs')
       .select('item_id, completed_at')
@@ -70,33 +71,61 @@ export async function GET(
     'X-PUBLISHED-TTL:PT6H',
   ]
 
-  for (const item of (items || []) as { id: string; name: string; note: string | null; interval_days: number }[]) {
+  type ItemRow = { id: string; name: string; note: string | null; interval_days: number | null; schedule_type: string | null; schedule_config: ScheduleConfig | null }
+  for (const item of (items || []) as ItemRow[]) {
     const lastDoneStr = latestLog[item.id]
-    const lastDone = lastDoneStr ? new Date(lastDoneStr) : null
-    const nextDue = lastDone
-      ? new Date(lastDone.getTime() + item.interval_days * 24 * 60 * 60 * 1000)
-      : now
-    // snap to start of UTC day
-    nextDue.setUTCHours(0, 0, 0, 0)
-    const nextDuePlusOne = new Date(nextDue.getTime() + 24 * 60 * 60 * 1000)
-
     const uid = `tracker-${item.id}@health-app`
     const desc = item.note ? item.note.replace(/\n/g, '\\n').replace(/,/g, '\\,') : ''
 
-    lines.push('BEGIN:VEVENT')
-    lines.push(`UID:${uid}`)
-    lines.push(`DTSTAMP:${dtstamp}`)
-    lines.push(`DTSTART;VALUE=DATE:${formatDate(nextDue)}`)
-    lines.push(`DTEND;VALUE=DATE:${formatDate(nextDuePlusOne)}`)
-    lines.push(`SUMMARY:${item.name}`)
-    if (desc) lines.push(`DESCRIPTION:${desc}`)
-    lines.push(`URL:${appUrl}/track`)
-    lines.push('BEGIN:VALARM')
-    lines.push('TRIGGER:-PT0S')
-    lines.push('ACTION:DISPLAY')
-    lines.push(`DESCRIPTION:${item.name} 到期`)
-    lines.push('END:VALARM')
-    lines.push('END:VEVENT')
+    if (item.schedule_type) {
+      // Fixed-schedule item — use RRULE for recurring events
+      const type = item.schedule_type as ScheduleType
+      const config = item.schedule_config || {}
+      const dtstart = getNextOccurrence(type, config, now)
+      dtstart.setHours(0, 0, 0, 0)
+      const dtend = new Date(dtstart.getTime() + 24 * 60 * 60 * 1000)
+      const rrule = scheduleToRRule(type, config)
+
+      lines.push('BEGIN:VEVENT')
+      lines.push(`UID:${uid}`)
+      lines.push(`DTSTAMP:${dtstamp}`)
+      lines.push(`DTSTART;VALUE=DATE:${formatDate(dtstart)}`)
+      lines.push(`DTEND;VALUE=DATE:${formatDate(dtend)}`)
+      lines.push(rrule)
+      lines.push(`SUMMARY:${item.name}`)
+      if (desc) lines.push(`DESCRIPTION:${desc}`)
+      lines.push(`URL:${appUrl}/track`)
+      lines.push('BEGIN:VALARM')
+      lines.push('TRIGGER:-PT0S')
+      lines.push('ACTION:DISPLAY')
+      lines.push(`DESCRIPTION:${item.name}`)
+      lines.push('END:VALARM')
+      lines.push('END:VEVENT')
+    } else if (item.interval_days) {
+      // Interval item — single event for next due date
+      const lastDone = lastDoneStr ? new Date(lastDoneStr) : null
+      const nextDue = lastDone
+        ? new Date(lastDone.getTime() + item.interval_days * 24 * 60 * 60 * 1000)
+        : now
+      nextDue.setUTCHours(0, 0, 0, 0)
+      const nextDuePlusOne = new Date(nextDue.getTime() + 24 * 60 * 60 * 1000)
+
+      lines.push('BEGIN:VEVENT')
+      lines.push(`UID:${uid}`)
+      lines.push(`DTSTAMP:${dtstamp}`)
+      lines.push(`DTSTART;VALUE=DATE:${formatDate(nextDue)}`)
+      lines.push(`DTEND;VALUE=DATE:${formatDate(nextDuePlusOne)}`)
+      lines.push(`SUMMARY:${item.name}`)
+      if (desc) lines.push(`DESCRIPTION:${desc}`)
+      lines.push(`URL:${appUrl}/track`)
+      lines.push('BEGIN:VALARM')
+      lines.push('TRIGGER:-PT0S')
+      lines.push('ACTION:DISPLAY')
+      lines.push(`DESCRIPTION:${item.name} 到期`)
+      lines.push('END:VALARM')
+      lines.push('END:VEVENT')
+    }
+    // Items with no schedule: skip (nothing to remind)
   }
 
   lines.push('END:VCALENDAR')
