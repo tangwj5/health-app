@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
 import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil } from 'lucide-react'
-import { computeScheduleStatus, scheduleLabel, getNextOccurrence } from '@/lib/schedule'
+import { computeScheduleStatus, scheduleLabel } from '@/lib/schedule'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile, ScheduleType, ScheduleConfig } from '@/types'
 
 const TABS = ['習慣', '頻率事項'] as const
