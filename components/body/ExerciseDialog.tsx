@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { estimateCalories, INTENSITY_LABELS, BODY_PARTS } from '@/lib/exercise'
+import { estimateCalories, INTENSITY_LABELS, EXERCISE_TYPE_ICONS, EXERCISE_TYPE_LABELS, BODY_PARTS } from '@/lib/exercise'
 import type { ExerciseType, Intensity } from '@/types'
 
 function nowLocalDatetimeStr() {
@@ -48,6 +48,7 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
       recorded_at: new Date(recordedAt).toISOString(),
       exercise_type: type,
       body_parts: type === 'strength' ? bodyParts : [],
+
       intensity,
       duration_min: durationMin,
       calories_est: cals,
@@ -73,7 +74,7 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
           <div className="space-y-1">
             <Label>運動類型</Label>
             <div className="flex gap-2">
-              {(['walking', 'strength'] as ExerciseType[]).map(t => (
+              {(['walking', 'cycling', 'strength'] as ExerciseType[]).map(t => (
                 <button
                   key={t}
                   onClick={() => { setType(t); setBodyParts([]) }}
@@ -81,7 +82,7 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
                     type === t ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
                   }`}
                 >
-                  {t === 'walking' ? '🚶 走路' : '🏋️ 重訓'}
+                  {EXERCISE_TYPE_ICONS[t]} {EXERCISE_TYPE_LABELS[t]}
                 </button>
               ))}
             </div>

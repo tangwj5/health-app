@@ -91,7 +91,7 @@ export interface MealPresetItem {
   quantity_unit: 'serving' | 'g'
 }
 
-export type ExerciseType = 'walking' | 'strength'
+export type ExerciseType = 'walking' | 'cycling' | 'strength'
 export type Intensity = 'easy' | 'moderate' | 'hard'
 
 export interface Exercise {

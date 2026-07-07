@@ -34,6 +34,7 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
   const totalDuration = weekEx.reduce((s, e) => s + e.duration_min, 0)
   const totalCalories = weekEx.reduce((s, e) => s + e.calories_est, 0)
   const walkCount = weekEx.filter(e => e.exercise_type === 'walking').length
+  const cyclingCount = weekEx.filter(e => e.exercise_type === 'cycling').length
   const strengthCount = weekEx.filter(e => e.exercise_type === 'strength').length
 
   const partCounts: Record<string, number> = {}
@@ -58,6 +59,10 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
   const muscleEnd = [...weekMetrics].reverse().find(m => m.muscle_kg != null)?.muscle_kg ?? null
   const muscleDelta = muscleStart != null && muscleEnd != null && weekMetrics.length >= 2
     ? parseFloat((muscleEnd - muscleStart).toFixed(2)) : null
+  const fatStart = weekMetrics.find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
+  const fatEnd = [...weekMetrics].reverse().find(m => m.body_fat_pct != null)?.body_fat_pct ?? null
+  const fatDelta = fatStart != null && fatEnd != null && weekMetrics.length >= 2
+    ? parseFloat((fatEnd - fatStart).toFixed(2)) : null
 
   return (
     <div className="space-y-4">
@@ -102,6 +107,7 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
 
             <div className="flex flex-wrap gap-1.5 mb-2">
               {walkCount > 0 && <span className="bg-gray-100 rounded-full px-2 py-0.5 text-xs text-gray-500">走路 {walkCount} 次</span>}
+              {cyclingCount > 0 && <span className="bg-gray-100 rounded-full px-2 py-0.5 text-xs text-gray-500">騎車 {cyclingCount} 次</span>}
               {strengthCount > 0 && <span className="bg-gray-100 rounded-full px-2 py-0.5 text-xs text-gray-500">重訓 {strengthCount} 次</span>}
               {Object.entries(partCounts).map(([part, count]) => (
                 <span key={part} className="bg-blue-50 text-blue-600 text-xs rounded-full px-2 py-0.5">
@@ -110,7 +116,7 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
               ))}
             </div>
 
-            {(weightDelta != null || muscleDelta != null) && (
+            {(weightDelta != null || muscleDelta != null || fatDelta != null) && (
               <div className="border-t pt-2 mt-2 space-y-1">
                 <p className="text-xs font-medium text-gray-400">體組成變化</p>
                 {weightDelta != null && (
@@ -126,6 +132,14 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
                     肌肉量 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
                     <span className={`ml-1.5 font-semibold ${muscleDelta > 0 ? 'text-blue-600' : muscleDelta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                       ({muscleDelta > 0 ? '+' : ''}{muscleDelta} kg)
+                    </span>
+                  </p>
+                )}
+                {fatDelta != null && (
+                  <p className="text-xs text-gray-700">
+                    體脂率 {fatStart?.toFixed(1)} → {fatEnd?.toFixed(1)} %
+                    <span className={`ml-1.5 font-semibold ${fatDelta < 0 ? 'text-green-600' : fatDelta > 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                      ({fatDelta > 0 ? '+' : ''}{fatDelta} %)
                     </span>
                   </p>
                 )}
