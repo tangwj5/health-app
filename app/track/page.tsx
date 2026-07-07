@@ -14,7 +14,8 @@ import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile } from '@/types'
 const TABS = ['習慣', '頻率事項'] as const
 type Tab = typeof TABS[number]
 
-const PRESET_CATEGORIES = ['家事', '耗材', '保養', '旅遊', '健康', '其他']
+// '開封' added for tracking skincare/consumable opening dates
+const PRESET_CATEGORIES = ['家事', '耗材', '保養', '開封', '旅遊', '健康', '其他']
 
 function toLocalDateTimeStr(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -355,6 +356,9 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [newItem, setNewItem] = useState({ name: '', category: '其他', interval_days: '', note: '' })
   const [adding, setAdding] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  // item editing state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editItemData, setEditItemData] = useState({ name: '', category: '', interval_days: '', note: '' })
 
   const loadData = useCallback(async () => {
     const [{ data: itemData }, { data: logData }] = await Promise.all([
@@ -409,6 +413,18 @@ function TrackerTab({ profile }: { profile: Profile }) {
       .limit(30)
     setItemHistory(prev => ({ ...prev, [itemId]: (data as TrackerLog[]) || [] }))
     loadData()
+  }
+
+  async function saveItemEdit(id: string) {
+    const updates = {
+      name: editItemData.name.trim() || undefined,
+      category: editItemData.category || '其他',
+      interval_days: editItemData.interval_days ? parseInt(editItemData.interval_days) : null,
+      note: editItemData.note.trim() || null,
+    }
+    await supabase.from('tracker_items').update(updates).eq('id', id)
+    setItems(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item))
+    setEditingItemId(null)
   }
 
   async function toggleHistory(id: string) {
@@ -475,7 +491,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
   ]
   const categories = ['全部', ...orderedCategories]
 
-  // custom categories already used (shown as extra chips in the add form)
+  // custom categories already used (shown as extra chips in the add/edit form)
   const customCategoriesInUse = usedCategories.filter(c => !PRESET_CATEGORIES.includes(c))
 
   const filtered = sortedItems.filter(item => {
@@ -498,6 +514,9 @@ function TrackerTab({ profile }: { profile: Profile }) {
 
   // whether the typed category in the add form is a custom (non-preset) value
   const isCustomCategory = !PRESET_CATEGORIES.includes(newItem.category) && !customCategoriesInUse.includes(newItem.category)
+
+  // today's completions for the summary card
+  const todayCompletedItems = sortedItems.filter(i => i.daysSince === 0)
 
   return (
     <div className="space-y-4">
@@ -526,6 +545,29 @@ function TrackerTab({ profile }: { profile: Profile }) {
           </button>
         ))}
       </div>
+
+      {/* Today's completions summary */}
+      {todayCompletedItems.length > 0 && (
+        <div className="bg-green-50 border border-green-100 rounded-2xl px-4 py-3">
+          <p className="text-xs font-semibold text-green-700 mb-2 flex items-center gap-1.5">
+            <Check className="h-3.5 w-3.5" />
+            今日完成（{todayCompletedItems.length}）
+          </p>
+          <div className="space-y-1.5">
+            {todayCompletedItems.map(item => (
+              <div key={item.id} className="flex items-center gap-2">
+                <span className="text-xs text-gray-800 flex-1">{item.name}</span>
+                <span className="text-xs text-gray-400 bg-white rounded-full px-2 py-0.5 border border-gray-100">{item.category}</span>
+                {item.lastCompletedAt && (
+                  <span className="text-xs text-gray-400 tabular-nums">
+                    {format(parseISO(item.lastCompletedAt), 'HH:mm')}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Add item — placed at top */}
       {showAdd ? (
@@ -611,6 +653,8 @@ function TrackerTab({ profile }: { profile: Profile }) {
             const done = justDone.has(item.id)
             const isConfirming = confirmingItem === item.id
             const isShowingHistory = historyItem === item.id
+            const isEditingItem = editingItemId === item.id
+            const isEditCustom = !PRESET_CATEGORIES.includes(editItemData.category) && !customCategoriesInUse.includes(editItemData.category)
             return (
               <div key={item.id} className="bg-white rounded-2xl border p-4">
                 <div className="flex items-start gap-3">
@@ -633,8 +677,24 @@ function TrackerTab({ profile }: { profile: Profile }) {
                       </div>
                     ) : done ? (
                       <span className="text-xs text-green-600 font-medium bg-green-50 rounded-full px-2.5 py-1">✓ 完成</span>
-                    ) : isConfirming ? null : (
+                    ) : isConfirming || isEditingItem ? null : (
                       <>
+                        <button
+                          onClick={() => {
+                            setEditingItemId(item.id)
+                            setEditItemData({
+                              name: item.name,
+                              category: item.category,
+                              interval_days: item.interval_days?.toString() ?? '',
+                              note: item.note ?? '',
+                            })
+                            setHistoryItem(null)
+                          }}
+                          className="text-gray-300 hover:text-blue-400 p-1 transition-colors"
+                          title="編輯"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           onClick={() => togglePin(item.id, item.is_pinned)}
                           className={`p-1 rounded transition-colors ${item.is_pinned ? 'text-orange-400' : 'text-gray-300 hover:text-orange-300'}`}
@@ -656,6 +716,76 @@ function TrackerTab({ profile }: { profile: Profile }) {
                     )}
                   </div>
                 </div>
+
+                {/* Inline edit form */}
+                {isEditingItem && (
+                  <div className="mt-3 pt-3 border-t space-y-3">
+                    <Input
+                      autoFocus
+                      placeholder="事項名稱"
+                      value={editItemData.name}
+                      onChange={e => setEditItemData(p => ({ ...p, name: e.target.value }))}
+                    />
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">分類</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[...PRESET_CATEGORIES, ...customCategoriesInUse].map(c => (
+                          <button
+                            key={c}
+                            onClick={() => setEditItemData(p => ({ ...p, category: c }))}
+                            className={`px-3 py-1.5 rounded-full text-xs border font-medium transition-colors ${
+                              editItemData.category === c ? 'border-green-500 text-green-600 bg-green-50' : 'border-gray-200 text-gray-500'
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        placeholder="或輸入自訂分類..."
+                        value={isEditCustom ? editItemData.category : ''}
+                        onChange={e => {
+                          const val = e.target.value
+                          setEditItemData(p => ({ ...p, category: val || '其他' }))
+                        }}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">提醒週期（天，選填）</p>
+                      <Input
+                        type="number" min="1"
+                        placeholder="例：90"
+                        value={editItemData.interval_days}
+                        onChange={e => setEditItemData(p => ({ ...p, interval_days: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-gray-500">備註（選填）</p>
+                      <textarea
+                        placeholder="注意事項..."
+                        value={editItemData.note}
+                        onChange={e => setEditItemData(p => ({ ...p, note: e.target.value }))}
+                        rows={2}
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveItemEdit(item.id)}
+                        className="flex-1 py-1.5 rounded-lg bg-green-500 text-white text-xs font-medium"
+                      >
+                        儲存
+                      </button>
+                      <button
+                        onClick={() => setEditingItemId(null)}
+                        className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Inline confirm with time + note */}
                 {isConfirming && (
@@ -695,7 +825,7 @@ function TrackerTab({ profile }: { profile: Profile }) {
                 )}
 
                 {/* History toggle */}
-                {!isConfirming && (
+                {!isConfirming && !isEditingItem && (
                   <button
                     onClick={() => toggleHistory(item.id)}
                     className="mt-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"

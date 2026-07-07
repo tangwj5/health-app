@@ -12,10 +12,11 @@ function formatDateTime(d: Date): string {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params
+  const appUrl = new URL(request.url).origin
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return new NextResponse('Server not configured', { status: 500 })
@@ -89,6 +90,7 @@ export async function GET(
     lines.push(`DTEND;VALUE=DATE:${formatDate(nextDuePlusOne)}`)
     lines.push(`SUMMARY:${item.name}`)
     if (desc) lines.push(`DESCRIPTION:${desc}`)
+    lines.push(`URL:${appUrl}/track`)
     lines.push('BEGIN:VALARM')
     lines.push('TRIGGER:-PT0S')
     lines.push('ACTION:DISPLAY')
