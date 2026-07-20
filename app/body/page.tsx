@@ -53,6 +53,7 @@ export default function BodyPage() {
   const [mealCorrelation, setMealCorrelation] = useState<Array<{date: string, calories: number, protein: number, weight: number | null}>>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [showExerciseDialog, setShowExerciseDialog] = useState(false)
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null)
 
   useEffect(() => {
     async function loadProfiles() {
@@ -265,6 +266,7 @@ export default function BodyPage() {
               await supabase.from('exercises').delete().eq('id', id)
               loadExercises()
             }}
+            onEdit={setEditingExercise}
           />
         )}
         {tab === '歷史記錄' && (
@@ -285,6 +287,16 @@ export default function BodyPage() {
           weightKg={profile.weight_kg}
           onClose={() => setShowExerciseDialog(false)}
           onSaved={() => { setShowExerciseDialog(false); loadExercises() }}
+        />
+      )}
+
+      {editingExercise && (
+        <ExerciseDialog
+          profileId={profile.id}
+          weightKg={profile.weight_kg}
+          exercise={editingExercise}
+          onClose={() => setEditingExercise(null)}
+          onSaved={() => { setEditingExercise(null); loadExercises() }}
         />
       )}
 

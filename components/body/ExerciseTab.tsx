@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { EXERCISE_TYPE_LABELS, INTENSITY_LABELS } from '@/lib/exercise'
 import type { Exercise, BodyMetric, Profile } from '@/types'
 
@@ -11,9 +11,10 @@ interface Props {
   exercises: Exercise[]
   metrics: BodyMetric[]
   onDelete: (id: string) => Promise<void>
+  onEdit: (exercise: Exercise) => void
 }
 
-export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
+export function ExerciseTab({ exercises, metrics, onDelete, onEdit }: Props) {
   const [weekOffset, setWeekOffset] = useState(0)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -171,8 +172,14 @@ export function ExerciseTab({ exercises, metrics, onDelete }: Props) {
                     </div>
                     {e.note && <p className="text-xs text-gray-400 mt-0.5">{e.note}</p>}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <span className="text-xs text-gray-400">{format(parseISO(e.recorded_at), 'M/d HH:mm')}</span>
+                    <button
+                      onClick={() => onEdit(e)}
+                      className="p-1 rounded hover:bg-gray-100 text-gray-300 hover:text-gray-500 transition-colors"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       onClick={() => setConfirmDelete(e.id)}
                       className="p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 transition-colors"

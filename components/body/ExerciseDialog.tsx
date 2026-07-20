@@ -7,10 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { estimateCalories, INTENSITY_LABELS, EXERCISE_TYPE_ICONS, EXERCISE_TYPE_LABELS, BODY_PARTS } from '@/lib/exercise'
-import type { ExerciseType, Intensity } from '@/types'
+import type { Exercise, ExerciseType, Intensity } from '@/types'
 
-function nowLocalDatetimeStr() {
-  const d = new Date()
+function toLocalDatetimeStr(d: Date) {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
@@ -18,18 +17,19 @@ function nowLocalDatetimeStr() {
 interface Props {
   profileId: string
   weightKg: number
+  exercise?: Exercise
   onClose: () => void
   onSaved: () => void
 }
 
-export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props) {
+export function ExerciseDialog({ profileId, weightKg, exercise, onClose, onSaved }: Props) {
   const supabase = createClient()
-  const [recordedAt, setRecordedAt] = useState(nowLocalDatetimeStr())
-  const [type, setType] = useState<ExerciseType>('walking')
-  const [bodyParts, setBodyParts] = useState<string[]>([])
-  const [intensity, setIntensity] = useState<Intensity>('moderate')
-  const [duration, setDuration] = useState('30')
-  const [note, setNote] = useState('')
+  const [recordedAt, setRecordedAt] = useState(exercise ? toLocalDatetimeStr(new Date(exercise.recorded_at)) : toLocalDatetimeStr(new Date()))
+  const [type, setType] = useState<ExerciseType>(exercise?.exercise_type ?? 'walking')
+  const [bodyParts, setBodyParts] = useState<string[]>(exercise?.body_parts ?? [])
+  const [intensity, setIntensity] = useState<Intensity>(exercise?.intensity ?? 'moderate')
+  const [duration, setDuration] = useState(exercise ? String(exercise.duration_min) : '30')
+  const [note, setNote] = useState(exercise?.note ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,17 +43,18 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
   async function handleSave() {
     if (durationMin <= 0) { setError('請填入運動時間'); return }
     setSaving(true); setError(null)
-    const { error: err } = await supabase.from('exercises').insert({
-      profile_id: profileId,
+    const payload = {
       recorded_at: new Date(recordedAt).toISOString(),
       exercise_type: type,
       body_parts: type === 'strength' ? bodyParts : [],
-
       intensity,
       duration_min: durationMin,
       calories_est: cals,
       note: note || null,
-    })
+    }
+    const { error: err } = exercise
+      ? await supabase.from('exercises').update(payload).eq('id', exercise.id)
+      : await supabase.from('exercises').insert({ profile_id: profileId, ...payload })
     if (err) { setError(err.message); setSaving(false); return }
     setSaving(false)
     onSaved()
@@ -63,7 +64,7 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-sm mx-4">
         <DialogHeader>
-          <DialogTitle>記錄運動</DialogTitle>
+          <DialogTitle>{exercise ? '編輯運動' : '記錄運動'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">
@@ -151,7 +152,7 @@ export function ExerciseDialog({ profileId, weightKg, onClose, onSaved }: Props)
           {error && <p className="text-xs text-red-500">{error}</p>}
 
           <Button onClick={handleSave} disabled={saving} className="w-full bg-green-500 hover:bg-green-600">
-            {saving ? '儲存中...' : '新增記錄'}
+            {saving ? '儲存中...' : exercise ? '儲存' : '新增記錄'}
           </Button>
         </div>
       </DialogContent>
