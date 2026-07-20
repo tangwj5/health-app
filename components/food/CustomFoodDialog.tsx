@@ -116,12 +116,12 @@ export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdde
               <Input type="number" value={form.protein_per_serving} onChange={e => update('protein_per_serving', e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">碳水 (g)</Label>
-              <Input type="number" value={form.carbs_per_serving} onChange={e => update('carbs_per_serving', e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs">脂肪 (g)</Label>
               <Input type="number" value={form.fat_per_serving} onChange={e => update('fat_per_serving', e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">碳水 (g)</Label>
+              <Input type="number" value={form.carbs_per_serving} onChange={e => update('carbs_per_serving', e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">

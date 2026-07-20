@@ -102,12 +102,12 @@ export function EditFoodDialog({ food, onClose, onSaved }: Props) {
               <Input type="number" value={protein} onChange={e => setProtein(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">碳水 (g)</Label>
-              <Input type="number" value={carbs} onChange={e => setCarbs(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs">脂肪 (g)</Label>
               <Input type="number" value={fat} onChange={e => setFat(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">碳水 (g)</Label>
+              <Input type="number" value={carbs} onChange={e => setCarbs(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
