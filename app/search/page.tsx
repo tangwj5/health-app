@@ -126,19 +126,35 @@ function SearchContent() {
     }
   }
 
+  async function resizeImage(file: File, maxPx = 1280): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        let { width, height } = img
+        if (width > maxPx || height > maxPx) {
+          if (width > height) { height = Math.round(height * maxPx / width); width = maxPx }
+          else { width = Math.round(width * maxPx / height); height = maxPx }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width; canvas.height = height
+        canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+        URL.revokeObjectURL(url)
+        resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('圖片載入失敗')) }
+      img.src = url
+    })
+  }
+
   async function handleScanLabel(file: File) {
     setScanning(true)
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
+      const base64 = await resizeImage(file)
       const res = await fetch('/api/scan-label', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        body: JSON.stringify({ imageBase64: base64, mimeType: 'image/jpeg' }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -155,7 +171,7 @@ function SearchContent() {
       })
       setShowCustom(true)
     } catch (e) {
-      alert('辨識失敗，請重試或手動輸入')
+      alert(`辨識失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
       console.error(e)
     } finally {
       setScanning(false)
