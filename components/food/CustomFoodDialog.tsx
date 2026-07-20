@@ -8,28 +8,41 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { MealType } from '@/types'
 
+interface InitialData {
+  name?: string
+  serving_size_g?: string
+  serving_unit?: string
+  calories_per_serving?: string
+  protein_per_serving?: string
+  fat_per_serving?: string
+  carbs_per_serving?: string
+  sugar_per_serving?: string
+  trans_fat_per_serving?: string
+}
+
 interface Props {
   profileId: string
   mealType: MealType
   logDate: string
+  initialData?: InitialData
   onClose: () => void
   onAdded: () => void
 }
 
-export function CustomFoodDialog({ profileId, mealType, logDate, onClose, onAdded }: Props) {
+export function CustomFoodDialog({ profileId, mealType, logDate, initialData, onClose, onAdded }: Props) {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    name: '',
+    name: initialData?.name ?? '',
     brand: '',
-    serving_size_g: '100',
-    serving_unit: '份',
-    calories_per_serving: '',
-    protein_per_serving: '0',
-    carbs_per_serving: '0',
-    fat_per_serving: '0',
-    sugar_per_serving: '0',
-    trans_fat_per_serving: '0',
+    serving_size_g: initialData?.serving_size_g ?? '100',
+    serving_unit: initialData?.serving_unit ?? '份',
+    calories_per_serving: initialData?.calories_per_serving ?? '',
+    protein_per_serving: initialData?.protein_per_serving ?? '0',
+    fat_per_serving: initialData?.fat_per_serving ?? '0',
+    carbs_per_serving: initialData?.carbs_per_serving ?? '0',
+    sugar_per_serving: initialData?.sugar_per_serving ?? '0',
+    trans_fat_per_serving: initialData?.trans_fat_per_serving ?? '0',
   })
 
   function update(field: string, value: string) {

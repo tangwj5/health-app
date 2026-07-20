@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AddFoodDialog } from '@/components/food/AddFoodDialog'
 import { CustomFoodDialog } from '@/components/food/CustomFoodDialog'
-import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed } from 'lucide-react'
+import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed, Camera } from 'lucide-react'
 import { EditFoodDialog } from '@/components/food/EditFoodDialog'
 import { CreatePresetDialog } from '@/components/food/CreatePresetDialog'
 import { UsePresetDialog } from '@/components/food/UsePresetDialog'
@@ -66,6 +66,9 @@ function SearchContent() {
   const [selectedFood, setSelectedFood] = useState<Omit<Food, 'id' | 'created_by' | 'created_at'> | null>(null)
   const [selectedFoodId, setSelectedFoodId] = useState<string | undefined>(undefined)
   const [showCustom, setShowCustom] = useState(false)
+  const [scannedData, setScannedData] = useState<Record<string, string> | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [editingFood, setEditingFood] = useState<Food | null>(null)
   const [presets, setPresets] = useState<MealPreset[]>([])
   const [presetResults, setPresetResults] = useState<MealPreset[]>([])
@@ -120,6 +123,43 @@ function SearchContent() {
         new Map(data.map((e: { food: unknown }) => [(e.food as Food).id, e.food as Food])).values()
       ).slice(0, 8) as Food[]
       setRecentFoods(unique)
+    }
+  }
+
+  async function handleScanLabel(file: File) {
+    setScanning(true)
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve((reader.result as string).split(',')[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      const res = await fetch('/api/scan-label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setScannedData({
+        name: data.name || '',
+        serving_size_g: String(data.serving_size_g ?? '100'),
+        serving_unit: data.serving_unit || '份',
+        calories_per_serving: String(data.calories_per_serving ?? ''),
+        protein_per_serving: String(data.protein_per_serving ?? '0'),
+        fat_per_serving: String(data.fat_per_serving ?? '0'),
+        carbs_per_serving: String(data.carbs_per_serving ?? '0'),
+        sugar_per_serving: String(data.sugar_per_serving ?? '0'),
+        trans_fat_per_serving: String(data.trans_fat_per_serving ?? '0'),
+      })
+      setShowCustom(true)
+    } catch (e) {
+      alert('辨識失敗，請重試或手動輸入')
+      console.error(e)
+    } finally {
+      setScanning(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -230,7 +270,15 @@ function SearchContent() {
             </div>
             <div className="flex gap-1.5">
               <button
-                onClick={() => setShowCustom(true)}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={scanning}
+                className="flex items-center gap-1 text-xs text-purple-600 border border-purple-200 bg-purple-50 rounded-full px-2.5 py-1 hover:bg-purple-100 disabled:opacity-50"
+              >
+                <Camera className="h-3 w-3" />
+                {scanning ? '辨識中...' : '拍照辨識'}
+              </button>
+              <button
+                onClick={() => { setScannedData(null); setShowCustom(true) }}
                 className="flex items-center gap-1 text-xs text-gray-500 border border-gray-200 rounded-full px-2.5 py-1 hover:bg-gray-50"
               >
                 <Plus className="h-3 w-3" />
@@ -244,6 +292,14 @@ function SearchContent() {
                 建立組合
               </button>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleScanLabel(f) }}
+            />
           </div>
         </div>
       </div>
@@ -494,7 +550,8 @@ function SearchContent() {
           profileId={profile.id}
           mealType={mealType}
           logDate={selectedDate}
-          onClose={() => setShowCustom(false)}
+          initialData={scannedData ?? undefined}
+          onClose={() => { setShowCustom(false); setScannedData(null) }}
           onAdded={() => { router.back() }}
         />
       )}
