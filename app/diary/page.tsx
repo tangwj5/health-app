@@ -196,6 +196,7 @@ export default function DiaryPage() {
             entries={entries}
             calorieTarget={profile.calorie_target}
             proteinTarget={profile.protein_target}
+            weightKg={profile.weight_kg}
             exerciseCalories={exerciseCalories}
           />
         )}

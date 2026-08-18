@@ -7,6 +7,7 @@ interface Props {
   entries: MealEntry[]
   calorieTarget: number
   proteinTarget: number
+  weightKg: number
   exerciseCalories?: number
 }
 
@@ -25,7 +26,7 @@ const STATUS_COLORS = {
   red: 'bg-red-500',
 }
 
-export function NutritionSummary({ entries, calorieTarget, proteinTarget, exerciseCalories = 0 }: Props) {
+export function NutritionSummary({ entries, calorieTarget, proteinTarget, weightKg, exerciseCalories = 0 }: Props) {
   const totals = entries.reduce(
     (acc, e) => ({
       calories: acc.calories + e.calories,
@@ -36,7 +37,7 @@ export function NutritionSummary({ entries, calorieTarget, proteinTarget, exerci
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   )
 
-  const fatTarget = Math.round((calorieTarget * 0.25) / 9)
+  const fatTarget = Math.round(weightKg * 0.88)
   const carbTarget = Math.round((calorieTarget - proteinTarget * 4 - fatTarget * 9) / 4)
 
   const calStatus = getNutritionStatus(totals.calories, calorieTarget)
