@@ -14,6 +14,7 @@ import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed, Camera }
 import { EditFoodDialog } from '@/components/food/EditFoodDialog'
 import { CreatePresetDialog } from '@/components/food/CreatePresetDialog'
 import { UsePresetDialog } from '@/components/food/UsePresetDialog'
+import { FoodPhotoScanDialog } from '@/components/food/FoodPhotoScanDialog'
 import type { Food, MealType, MealPreset, OFFProduct, Profile } from '@/types'
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -68,7 +69,10 @@ function SearchContent() {
   const [showCustom, setShowCustom] = useState(false)
   const [scannedData, setScannedData] = useState<Record<string, string> | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [foodPhotoData, setFoodPhotoData] = useState<Record<string, unknown> | null>(null)
+  const [scanningFood, setScanningFood] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const foodPhotoInputRef = useRef<HTMLInputElement>(null)
   const [editingFood, setEditingFood] = useState<Food | null>(null)
   const [presets, setPresets] = useState<MealPreset[]>([])
   const [presetResults, setPresetResults] = useState<MealPreset[]>([])
@@ -145,6 +149,26 @@ function SearchContent() {
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('圖片載入失敗')) }
       img.src = url
     })
+  }
+
+  async function handleScanFood(file: File) {
+    setScanningFood(true)
+    try {
+      const base64 = await resizeImage(file)
+      const res = await fetch('/api/scan-food', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64, mimeType: 'image/jpeg' }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setFoodPhotoData(data)
+    } catch (e) {
+      alert(`辨識失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
+    } finally {
+      setScanningFood(false)
+      if (foodPhotoInputRef.current) foodPhotoInputRef.current.value = ''
+    }
   }
 
   async function handleScanLabel(file: File) {
@@ -291,7 +315,15 @@ function SearchContent() {
                 className="flex items-center gap-1 text-xs text-purple-600 border border-purple-200 bg-purple-50 rounded-full px-2.5 py-1 hover:bg-purple-100 disabled:opacity-50"
               >
                 <Camera className="h-3 w-3" />
-                {scanning ? '辨識中...' : '拍照辨識'}
+                {scanning ? '辨識中...' : '掃標示'}
+              </button>
+              <button
+                onClick={() => foodPhotoInputRef.current?.click()}
+                disabled={scanningFood}
+                className="flex items-center gap-1 text-xs text-orange-600 border border-orange-200 bg-orange-50 rounded-full px-2.5 py-1 hover:bg-orange-100 disabled:opacity-50"
+              >
+                <Camera className="h-3 w-3" />
+                {scanningFood ? '估算中...' : '拍料理'}
               </button>
               <button
                 onClick={() => { setScannedData(null); setShowCustom(true) }}
@@ -315,6 +347,14 @@ function SearchContent() {
               capture="environment"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleScanLabel(f) }}
+            />
+            <input
+              ref={foodPhotoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleScanFood(f) }}
             />
           </div>
         </div>
@@ -557,6 +597,18 @@ function SearchContent() {
           food={editingFood}
           onClose={() => setEditingFood(null)}
           onSaved={() => { setEditingFood(null); loadAllCustomFoods() }}
+        />
+      )}
+
+      {/* Food photo scan dialog */}
+      {foodPhotoData && profile && (
+        <FoodPhotoScanDialog
+          profileId={profile.id}
+          mealType={mealType}
+          logDate={selectedDate}
+          initialData={foodPhotoData as Parameters<typeof FoodPhotoScanDialog>[0]['initialData']}
+          onClose={() => setFoodPhotoData(null)}
+          onAdded={() => { router.back() }}
         />
       )}
 
