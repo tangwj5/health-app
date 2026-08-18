@@ -34,7 +34,15 @@ export function MealSection({
   const [copying, setCopying] = useState(false)
   const [copyingOther, setCopyingOther] = useState(false)
 
-  const total = entries.reduce((sum, e) => sum + e.calories, 0)
+  const totals = entries.reduce(
+    (acc, e) => ({
+      calories: acc.calories + e.calories,
+      protein: acc.protein + e.protein,
+      carbs: acc.carbs + e.carbs,
+      fat: acc.fat + e.fat,
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  )
 
   async function handleCopyYesterday() {
     setCopying(true)
@@ -59,7 +67,7 @@ export function MealSection({
           className="flex-1 flex items-center gap-2 text-left"
         >
           <span className="font-semibold text-gray-700">{label}</span>
-          <span className="text-sm text-gray-400">{Math.round(total)} kcal</span>
+          <span className="text-sm text-gray-400">{Math.round(totals.calories)} kcal</span>
           {collapsed
             ? <ChevronDown className="h-4 w-4 text-gray-300 ml-auto" />
             : <ChevronUp className="h-4 w-4 text-gray-300 ml-auto" />
@@ -75,6 +83,19 @@ export function MealSection({
               {entries.map(entry => (
                 <FoodEntryRow key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} onEdit={() => onEdit(entry)} />
               ))}
+            </div>
+          )}
+
+          {/* Meal subtotal */}
+          {entries.length > 0 && (
+            <div className="border-t px-4 py-2 flex justify-between text-xs text-gray-500 bg-gray-50">
+              <span>小計</span>
+              <div className="flex gap-3">
+                <span><span className="font-medium text-gray-700">{Math.round(totals.calories)}</span> kcal</span>
+                <span>蛋白 <span className="font-medium text-gray-700">{Math.round(totals.protein)}</span>g</span>
+                <span>碳水 <span className="font-medium text-gray-700">{Math.round(totals.carbs)}</span>g</span>
+                <span>脂肪 <span className="font-medium text-gray-700">{Math.round(totals.fat)}</span>g</span>
+              </div>
             </div>
           )}
 
