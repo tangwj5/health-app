@@ -36,8 +36,8 @@ export function NutritionSummary({ entries, calorieTarget, proteinTarget, exerci
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   )
 
-  const carbTarget = Math.round((calorieTarget * 0.45) / 4)
-  const fatTarget = Math.round((calorieTarget * 0.3) / 9)
+  const fatTarget = Math.round((calorieTarget * 0.25) / 9)
+  const carbTarget = Math.round((calorieTarget - proteinTarget * 4 - fatTarget * 9) / 4)
 
   const calStatus = getNutritionStatus(totals.calories, calorieTarget)
   const proteinStatus = getNutritionStatus(totals.protein, proteinTarget)
