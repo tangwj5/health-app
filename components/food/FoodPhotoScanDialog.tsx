@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { RefreshCw } from 'lucide-react'
 import type { MealType } from '@/types'
 
-interface ScanResult {
+export interface ScanResult {
   description: string
   name: string
   serving_size_g: number

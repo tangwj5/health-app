@@ -14,7 +14,7 @@ import { Search, ArrowLeft, Plus, Clock, Star, Pencil, UtensilsCrossed, Camera }
 import { EditFoodDialog } from '@/components/food/EditFoodDialog'
 import { CreatePresetDialog } from '@/components/food/CreatePresetDialog'
 import { UsePresetDialog } from '@/components/food/UsePresetDialog'
-import { FoodPhotoScanDialog } from '@/components/food/FoodPhotoScanDialog'
+import { FoodPhotoScanDialog, ScanResult } from '@/components/food/FoodPhotoScanDialog'
 import type { Food, MealType, MealPreset, OFFProduct, Profile } from '@/types'
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -69,7 +69,7 @@ function SearchContent() {
   const [showCustom, setShowCustom] = useState(false)
   const [scannedData, setScannedData] = useState<Record<string, string> | null>(null)
   const [scanning, setScanning] = useState(false)
-  const [foodPhotoData, setFoodPhotoData] = useState<Record<string, unknown> | null>(null)
+  const [foodPhotoData, setFoodPhotoData] = useState<ScanResult | null>(null)
   const [scanningFood, setScanningFood] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const foodPhotoInputRef = useRef<HTMLInputElement>(null)
@@ -162,7 +162,7 @@ function SearchContent() {
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-      setFoodPhotoData(data)
+      setFoodPhotoData(data as ScanResult)
     } catch (e) {
       alert(`辨識失敗：${e instanceof Error ? e.message : '未知錯誤'}`)
     } finally {
@@ -606,7 +606,7 @@ function SearchContent() {
           profileId={profile.id}
           mealType={mealType}
           logDate={selectedDate}
-          initialData={foodPhotoData as Parameters<typeof FoodPhotoScanDialog>[0]['initialData']}
+          initialData={foodPhotoData}
           onClose={() => setFoodPhotoData(null)}
           onAdded={() => { router.back() }}
         />
