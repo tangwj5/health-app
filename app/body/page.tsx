@@ -691,7 +691,8 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
 
   const hasLastWeek = lwAvgCal != null || lwAvgPro != null
 
-  const recent30 = data.slice(-30)
+  const cutoff30 = format(addDays(new Date(), -29), 'yyyy-MM-dd')
+  const recent30 = data.filter(d => d.date >= cutoff30)
   const avgCal = recent30.length
     ? Math.round(recent30.filter(d => d.calories > 0).reduce((s, d) => s + d.calories, 0) / (recent30.filter(d => d.calories > 0).length || 1))
     : 0
@@ -817,11 +818,11 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
       {/* Daily breakdown */}
       <div className="bg-white rounded-2xl border p-4">
         <p className="text-sm font-semibold text-gray-700 mb-3">飲食 × 體重對照（近30天）</p>
-        {recent30.length === 0 ? (
-          <p className="text-sm text-gray-400 text-center py-6">尚無資料</p>
+        {recent30.filter(d => d.calories > 0).length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">尚無飲食記錄</p>
         ) : (
           <div className="space-y-1.5 max-h-80 overflow-y-auto">
-            {[...recent30].reverse().map(d => (
+            {[...recent30].filter(d => d.calories > 0).reverse().map(d => (
               <div key={d.date} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
                 <span className="text-xs text-gray-400 w-16 shrink-0">{format(parseISO(d.date), 'M/d')}</span>
                 <div className="flex-1 space-y-0.5">
