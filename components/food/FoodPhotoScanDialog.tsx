@@ -36,6 +36,7 @@ export function FoodPhotoScanDialog({ profileId, mealType, logDate, initialData,
   const [description, setDescription] = useState(initialData.description || '')
   const [form, setForm] = useState({
     name: initialData.name ?? '',
+    brand: '',
     serving_size_g: String(initialData.serving_size_g ?? '100'),
     serving_unit: initialData.serving_unit ?? '份',
     calories_per_serving: String(initialData.calories_per_serving ?? ''),
@@ -90,7 +91,7 @@ export function FoodPhotoScanDialog({ profileId, mealType, logDate, initialData,
       .from('foods')
       .insert({
         name: form.name,
-        brand: null,
+        brand: form.brand || null,
         serving_size_g: parseFloat(form.serving_size_g) || 100,
         serving_unit: form.serving_unit,
         calories_per_serving: parseFloat(form.calories_per_serving),
@@ -161,6 +162,10 @@ export function FoodPhotoScanDialog({ profileId, mealType, logDate, initialData,
             <div className="space-y-1.5">
               <Label>食物名稱 *</Label>
               <Input value={form.name} onChange={e => update('name', e.target.value)} placeholder="例如：滷雞腿" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>品牌（選填）</Label>
+              <Input value={form.brand} onChange={e => update('brand', e.target.value)} placeholder="例如：自煮" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
