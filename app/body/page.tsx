@@ -265,7 +265,7 @@ export default function BodyPage() {
           />
         )}
         {tab === '飲食連動' && (
-          <DietTab profile={profile} data={mealCorrelation} metrics={metrics} />
+          <DietTab profile={profile} data={mealCorrelation} metrics={metrics} onRefresh={loadMealCorrelation} />
         )}
         {tab === '運動' && (
           <ExerciseTab
@@ -651,9 +651,10 @@ interface DietTabProps {
   profile: Profile
   data: Array<{date: string, calories: number, protein: number, weight: number | null}>
   metrics: BodyMetric[]
+  onRefresh?: () => void
 }
 
-function DietTab({ profile, data, metrics }: DietTabProps) {
+function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
   const goal = profile.goal
   const [weekOffset, setWeekOffset] = useState(0) // 0 = last week, 1 = two weeks ago, …
 
@@ -827,7 +828,22 @@ function DietTab({ profile, data, metrics }: DietTabProps) {
 
       {/* Daily breakdown */}
       <div className="bg-white rounded-2xl border p-4">
-        <p className="text-sm font-semibold text-gray-700 mb-3">飲食 × 體重對照（近30天）</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-gray-700">
+            飲食 × 體重對照（近30天）
+            <span className="ml-1.5 text-xs font-normal text-gray-400">
+              {data.filter(d => d.calories > 0).length} 天
+            </span>
+          </p>
+          {onRefresh && (
+            <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-green-600 flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              重新整理
+            </button>
+          )}
+        </div>
         {recent30.filter(d => d.calories > 0).length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">尚無飲食記錄</p>
         ) : (
