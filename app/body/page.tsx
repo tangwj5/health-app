@@ -837,12 +837,7 @@ function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
       {/* Daily breakdown */}
       <div className="bg-white rounded-2xl border p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-gray-700">
-            飲食 × 體重對照（近30天）
-            <span className="ml-1.5 text-xs font-normal text-gray-400">
-              {data.filter(d => d.calories > 0).length} 天 · 最新 {data.length > 0 ? data[data.length - 1].date.slice(5) : '無'} · id:{profile.id.slice(0,6)}
-            </span>
-          </p>
+          <p className="text-sm font-semibold text-gray-700">飲食 × 體重對照（近30天）</p>
           {onRefresh && (
             <button onClick={onRefresh} className="text-xs text-gray-400 hover:text-green-600 flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
