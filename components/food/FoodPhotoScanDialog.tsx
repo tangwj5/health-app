@@ -66,6 +66,7 @@ export function FoodPhotoScanDialog({ profileId, mealType, logDate, initialData,
       if (data.error) throw new Error(data.error)
       setForm({
         name: data.name ?? form.name,
+        brand: form.brand,
         serving_size_g: String(data.serving_size_g ?? form.serving_size_g),
         serving_unit: data.serving_unit ?? form.serving_unit,
         calories_per_serving: String(data.calories_per_serving ?? form.calories_per_serving),

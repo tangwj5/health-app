@@ -105,35 +105,45 @@ export default function BodyPage() {
   const loadMealCorrelation = useCallback(async () => {
     if (!profile) return
     const since = format(subWeeks(new Date(), rangeWeeks), 'yyyy-MM-dd')
-    const { data } = await supabase
-      .from('meal_entries')
-      .select('log_date, calories, protein')
-      .eq('profile_id', profile.id)
-      .gte('log_date', since)
+
+    const [{ data: mealData }, { data: metricData }] = await Promise.all([
+      supabase
+        .from('meal_entries')
+        .select('log_date, calories, protein')
+        .eq('profile_id', profile.id)
+        .gte('log_date', since),
+      supabase
+        .from('body_metrics')
+        .select('recorded_at, weight_kg, is_first_of_day')
+        .eq('profile_id', profile.id)
+        .gte('recorded_at', since),
+    ])
+
     const byDate: Record<string, { calories: number; protein: number }> = {}
-    for (const row of data || []) {
+    for (const row of mealData || []) {
       const d = row.log_date as string
       if (!byDate[d]) byDate[d] = { calories: 0, protein: 0 }
       byDate[d].calories += Number(row.calories) || 0
       byDate[d].protein += Number(row.protein) || 0
     }
-    // first-of-day weights keyed by date
+
     const firstWeights: Record<string, number> = {}
-    for (const m of metrics) {
+    for (const m of metricData || []) {
       if (!m.is_first_of_day || m.weight_kg == null) continue
       const d = format(parseISO(m.recorded_at), 'yyyy-MM-dd')
       if (!firstWeights[d]) firstWeights[d] = m.weight_kg
     }
+
     const allDates = [...new Set([...Object.keys(byDate), ...Object.keys(firstWeights)])].sort()
     setMealCorrelation(
       allDates.map(d => ({
         date: d,
-        calories: byDate[d]?.calories ?? 0,
-        protein: byDate[d]?.protein ?? 0,
+        calories: byDate[d] ? Math.round(byDate[d].calories) : 0,
+        protein: byDate[d] ? parseFloat(byDate[d].protein.toFixed(1)) : 0,
         weight: firstWeights[d] ?? null,
       }))
     )
-  }, [profile?.id, rangeWeeks, metrics])
+  }, [profile?.id, rangeWeeks])
 
   useEffect(() => {
     if (profile) loadMetrics()
