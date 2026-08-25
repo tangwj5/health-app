@@ -106,21 +106,29 @@ export default function BodyPage() {
     if (!profile) return
     const since = format(subWeeks(new Date(), rangeWeeks), 'yyyy-MM-dd')
 
-    const [{ data: mealData }, { data: metricData }] = await Promise.all([
-      supabase
+    // Fetch meal entries with pagination to bypass the 1000-row server limit
+    const allMealData: Array<{ log_date: string; calories: number; protein: number }> = []
+    const PAGE = 1000
+    for (let offset = 0; ; offset += PAGE) {
+      const { data: page } = await supabase
         .from('meal_entries')
         .select('log_date, calories, protein')
         .eq('profile_id', profile.id)
-        .gte('log_date', since),
-      supabase
-        .from('body_metrics')
-        .select('recorded_at, weight_kg, is_first_of_day')
-        .eq('profile_id', profile.id)
-        .gte('recorded_at', since),
-    ])
+        .gte('log_date', since)
+        .range(offset, offset + PAGE - 1)
+      if (!page || page.length === 0) break
+      allMealData.push(...(page as Array<{ log_date: string; calories: number; protein: number }>))
+      if (page.length < PAGE) break
+    }
+
+    const { data: metricData } = await supabase
+      .from('body_metrics')
+      .select('recorded_at, weight_kg, is_first_of_day')
+      .eq('profile_id', profile.id)
+      .gte('recorded_at', since)
 
     const byDate: Record<string, { calories: number; protein: number }> = {}
-    for (const row of mealData || []) {
+    for (const row of allMealData) {
       const d = row.log_date as string
       if (!byDate[d]) byDate[d] = { calories: 0, protein: 0 }
       byDate[d].calories += Number(row.calories) || 0
