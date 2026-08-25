@@ -832,7 +832,7 @@ function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
           <p className="text-sm font-semibold text-gray-700">
             飲食 × 體重對照（近30天）
             <span className="ml-1.5 text-xs font-normal text-gray-400">
-              {data.filter(d => d.calories > 0).length} 天
+              {data.filter(d => d.calories > 0).length} 天 · 最新 {data.length > 0 ? data[data.length - 1].date.slice(5) : '無'} · id:{profile.id.slice(0,6)}
             </span>
           </p>
           {onRefresh && (
