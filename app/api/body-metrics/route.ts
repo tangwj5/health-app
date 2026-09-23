@@ -34,7 +34,12 @@ export async function GET(req: NextRequest) {
     .limit(1)
     .maybeSingle()
 
-  return NextResponse.json(data ?? {})
+  return NextResponse.json({
+    weight_kg: data?.weight_kg ?? null,
+    body_fat_pct: data?.body_fat_pct ?? null,
+    muscle_kg: data?.muscle_kg ?? null,
+    visceral_fat: data?.visceral_fat ?? null,
+  })
 }
 
 export async function POST(req: NextRequest) {
@@ -45,6 +50,12 @@ export async function POST(req: NextRequest) {
 
   const profileId = await getProfileId(token)
   if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || typeof v === 'object') return null
+    const n = Number(v)
+    return isNaN(n) ? null : n
+  }
 
   const now = new Date()
   const todayUtc = format(now, 'yyyy-MM-dd')
@@ -61,10 +72,10 @@ export async function POST(req: NextRequest) {
 
   const { error } = await supabase.from('body_metrics').insert({
     profile_id: profileId,
-    weight_kg: weight_kg ?? null,
-    body_fat_pct: fat_pct ?? null,
-    muscle_kg: lean_kg ?? null,
-    visceral_fat: visceral_fat ?? null,
+    weight_kg: toNum(weight_kg),
+    body_fat_pct: toNum(fat_pct),
+    muscle_kg: toNum(lean_kg),
+    visceral_fat: toNum(visceral_fat),
     is_first_of_day: isFirstOfDay,
     recorded_at: now.toISOString(),
   })
