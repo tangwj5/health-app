@@ -52,7 +52,9 @@ export async function POST(req: NextRequest) {
   if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const toNum = (v: unknown): number | null => {
-    if (v === null || v === undefined || typeof v === 'object') return null
+    if (v === null || v === undefined) return null
+    if (Array.isArray(v)) return v.length > 0 ? toNum(v[0]) : null
+    if (typeof v === 'object') return null
     const n = Number(v)
     return isNaN(n) ? null : n
   }
@@ -81,5 +83,10 @@ export async function POST(req: NextRequest) {
   })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, is_first_of_day: isFirstOfDay })
+  return NextResponse.json({
+    ok: true,
+    is_first_of_day: isFirstOfDay,
+    received: { weight_kg: toNum(weight_kg), fat_pct: toNum(fat_pct), lean_kg: toNum(lean_kg), visceral_fat: toNum(visceral_fat) },
+    raw: { weight_kg, fat_pct, lean_kg, visceral_fat },
+  })
 }
