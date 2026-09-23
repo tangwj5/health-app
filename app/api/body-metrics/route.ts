@@ -19,45 +19,15 @@ async function getProfileId(token: string): Promise<string | null> {
   return data?.id ?? null
 }
 
-export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get('token')
-  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 })
-
-  const profileId = await getProfileId(token)
-  if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data } = await supabase
-    .from('body_metrics')
-    .select('weight_kg, body_fat_pct, muscle_kg, visceral_fat')
-    .eq('profile_id', profileId)
-    .order('recorded_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  return NextResponse.json({
-    weight_kg: data?.weight_kg ?? null,
-    body_fat_pct: data?.body_fat_pct ?? null,
-    muscle_kg: data?.muscle_kg ?? null,
-    visceral_fat: data?.visceral_fat ?? null,
-  })
+const toNum = (v: string | null): number | null => {
+  if (v === null || v === undefined || v === '' || v === 'null') return null
+  const n = Number(v)
+  return isNaN(n) ? null : n
 }
 
-export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const { token, weight_kg, fat_pct, lean_kg, visceral_fat } = body
-
-  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 })
-
+async function writeMetrics(token: string, weight_kg: string | null, fat_pct: string | null, lean_kg: string | null, visceral_fat: string | null) {
   const profileId = await getProfileId(token)
   if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const toNum = (v: unknown): number | null => {
-    if (v === null || v === undefined) return null
-    if (Array.isArray(v)) return v.length > 0 ? toNum(v[0]) : null
-    if (typeof v === 'object') return null
-    const n = Number(v)
-    return isNaN(n) ? null : n
-  }
 
   const now = new Date()
   const todayUtc = format(now, 'yyyy-MM-dd')
@@ -87,6 +57,41 @@ export async function POST(req: NextRequest) {
     ok: true,
     is_first_of_day: isFirstOfDay,
     received: { weight_kg: toNum(weight_kg), fat_pct: toNum(fat_pct), lean_kg: toNum(lean_kg), visceral_fat: toNum(visceral_fat) },
-    raw: { weight_kg, fat_pct, lean_kg, visceral_fat },
   })
+}
+
+export async function GET(req: NextRequest) {
+  const p = req.nextUrl.searchParams
+  const token = p.get('token')
+  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 })
+
+  // If write=1 is present, treat as a write request via query params
+  if (p.get('write') === '1') {
+    return writeMetrics(token, p.get('weight_kg'), p.get('fat_pct'), p.get('lean_kg'), p.get('visceral_fat'))
+  }
+
+  const profileId = await getProfileId(token)
+  if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data } = await supabase
+    .from('body_metrics')
+    .select('weight_kg, body_fat_pct, muscle_kg, visceral_fat')
+    .eq('profile_id', profileId)
+    .order('recorded_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  return NextResponse.json({
+    weight_kg: data?.weight_kg ?? null,
+    body_fat_pct: data?.body_fat_pct ?? null,
+    muscle_kg: data?.muscle_kg ?? null,
+    visceral_fat: data?.visceral_fat ?? null,
+  })
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}))
+  const { token, weight_kg, fat_pct, lean_kg, visceral_fat } = body
+  if (!token) return NextResponse.json({ error: 'Missing token' }, { status: 400 })
+  return writeMetrics(token, weight_kg, fat_pct, lean_kg, visceral_fat)
 }
