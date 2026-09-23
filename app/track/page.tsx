@@ -8,7 +8,7 @@ import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2 } from 'lucide-react'
 import { computeScheduleStatus, scheduleLabel } from '@/lib/schedule'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile, ScheduleType, ScheduleConfig } from '@/types'
 
@@ -506,6 +506,8 @@ function TrackerTab({ profile }: { profile: Profile }) {
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null)
   const [editingLog, setEditingLog] = useState<string | null>(null)
   const [editingLogAt, setEditingLogAt] = useState('')
+  const [editingLogNote, setEditingLogNote] = useState('')
+  const [deleteLogConfirm, setDeleteLogConfirm] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newItem, setNewItem] = useState({ name: '', category: '其他', note: '' })
   const [newSchedule, setNewSchedule] = useState<ScheduleState>(DEFAULT_SCHEDULE)
@@ -555,8 +557,19 @@ function TrackerTab({ profile }: { profile: Profile }) {
   }
 
   async function saveLogEdit(logId: string, itemId: string) {
-    await supabase.from('tracker_logs').update({ completed_at: new Date(editingLogAt).toISOString() }).eq('id', logId)
+    await supabase.from('tracker_logs').update({
+      completed_at: new Date(editingLogAt).toISOString(),
+      note: editingLogNote.trim() || null,
+    }).eq('id', logId)
     setEditingLog(null)
+    const { data } = await supabase.from('tracker_logs').select('*').eq('item_id', itemId).order('completed_at', { ascending: false }).limit(30)
+    setItemHistory(prev => ({ ...prev, [itemId]: (data as TrackerLog[]) || [] }))
+    loadData()
+  }
+
+  async function deleteLog(logId: string, itemId: string) {
+    await supabase.from('tracker_logs').delete().eq('id', logId)
+    setDeleteLogConfirm(null)
     const { data } = await supabase.from('tracker_logs').select('*').eq('item_id', itemId).order('completed_at', { ascending: false }).limit(30)
     setItemHistory(prev => ({ ...prev, [itemId]: (data as TrackerLog[]) || [] }))
     loadData()
@@ -940,21 +953,38 @@ function TrackerTab({ profile }: { profile: Profile }) {
                                 <div className="space-y-1.5 py-1">
                                   <input type="datetime-local" value={editingLogAt} onChange={e => setEditingLogAt(e.target.value)}
                                     className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
+                                  <input type="text" value={editingLogNote} onChange={e => setEditingLogNote(e.target.value)}
+                                    placeholder="說明（可不填）"
+                                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
                                   <div className="flex gap-1.5">
                                     <button onClick={() => saveLogEdit(log.id, item.id)} className="text-xs text-green-600 px-2 py-0.5 rounded border border-green-200">儲存</button>
                                     <button onClick={() => setEditingLog(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
                                   </div>
                                 </div>
+                              ) : deleteLogConfirm === log.id ? (
+                                <div className="flex items-center gap-1.5 py-1">
+                                  <span className="text-gray-500 flex-1">確定刪除此筆記錄？</span>
+                                  <button onClick={() => deleteLog(log.id, item.id)} className="text-xs text-red-500 px-2 py-0.5 rounded border border-red-200">刪除</button>
+                                  <button onClick={() => setDeleteLogConfirm(null)} className="text-xs text-gray-400 px-2 py-0.5 rounded border border-gray-200">取消</button>
+                                </div>
                               ) : (
                                 <div className="flex items-start gap-2">
                                   <span className="text-gray-400 shrink-0 w-28">{format(parseISO(log.completed_at), 'yyyy/M/d HH:mm')}</span>
                                   {log.note && <span className="text-gray-600 flex-1">{log.note}</span>}
-                                  <button
-                                    onClick={() => { setEditingLog(log.id); setEditingLogAt(toLocalDateTimeStr(parseISO(log.completed_at))) }}
-                                    className="text-gray-300 hover:text-gray-500 p-0.5 shrink-0 ml-auto"
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                  </button>
+                                  <div className="flex items-center gap-1 shrink-0 ml-auto">
+                                    <button
+                                      onClick={() => { setEditingLog(log.id); setEditingLogAt(toLocalDateTimeStr(parseISO(log.completed_at))); setEditingLogNote(log.note ?? '') }}
+                                      className="text-gray-300 hover:text-gray-500 p-0.5"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => setDeleteLogConfirm(log.id)}
+                                      className="text-gray-300 hover:text-red-400 p-0.5"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                               )}
                             </div>
