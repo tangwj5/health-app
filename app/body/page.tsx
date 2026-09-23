@@ -7,7 +7,7 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { PersonSwitcher } from '@/components/diary/PersonSwitcher'
 import { BodyMetricDialog } from '@/components/body/BodyMetricDialog'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, TrendingDown, TrendingUp, Minus } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingDown, TrendingUp, Minus, X } from 'lucide-react'
 import { format, parseISO, startOfWeek, endOfWeek, subWeeks, addDays } from 'date-fns'
 import type { BodyMetric, Profile, Exercise } from '@/types'
 import { ExerciseDialog } from '@/components/body/ExerciseDialog'
@@ -19,7 +19,7 @@ type Tab = (typeof TABS)[number]
 const METRICS = [
   { key: 'weight_kg' as const, label: '體重', unit: 'kg', color: '#6366f1' },
   { key: 'body_fat_pct' as const, label: '體脂', unit: '%', color: '#ef4444' },
-  { key: 'muscle_kg' as const, label: '肌肉量', unit: 'kg', color: '#3b82f6' },
+  { key: 'muscle_kg' as const, label: '淨體重', unit: 'kg', color: '#3b82f6' },
   { key: 'visceral_fat' as const, label: '內臟脂肪', unit: '', color: '#f97316' },
 ]
 type MetricKey = (typeof METRICS)[number]['key']
@@ -29,6 +29,14 @@ const RANGES = [
   { label: '3個月', weeks: 13 },
   { label: '6個月', weeks: 26 },
 ]
+
+interface BodyEvent {
+  id: string
+  profile_id: string
+  event_date: string
+  label: string
+  created_at: string
+}
 
 function formatValue(v: number | null, key: MetricKey) {
   if (v == null) return '—'
@@ -351,6 +359,37 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
   const metaDef = METRICS.find(m => m.key === activeMetric)!
 
   const [dataFilter, setDataFilter] = useState<'all' | 'first' | 'other'>('all')
+  const [events, setEvents] = useState<BodyEvent[]>([])
+  const [addingEvent, setAddingEvent] = useState(false)
+  const [newEventDate, setNewEventDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [newEventLabel, setNewEventLabel] = useState('')
+
+  useEffect(() => {
+    supabase
+      .from('body_events')
+      .select('*')
+      .eq('profile_id', profile.id)
+      .order('event_date', { ascending: true })
+      .then(({ data }) => setEvents((data as BodyEvent[]) || []))
+  }, [profile.id])
+
+  async function addEvent() {
+    if (!newEventLabel.trim()) return
+    await supabase.from('body_events').insert({
+      profile_id: profile.id,
+      event_date: newEventDate,
+      label: newEventLabel.trim(),
+    })
+    const { data } = await supabase.from('body_events').select('*').eq('profile_id', profile.id).order('event_date', { ascending: true })
+    setEvents((data as BodyEvent[]) || [])
+    setAddingEvent(false)
+    setNewEventLabel('')
+  }
+
+  async function deleteEvent(id: string) {
+    await supabase.from('body_events').delete().eq('id', id)
+    setEvents(prev => prev.filter(e => e.id !== id))
+  }
 
   // latest first-of-day entry for current stats
   const latest = [...metrics].reverse().find(m => m.is_first_of_day)
@@ -386,6 +425,7 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
     .map(m => ({
       label: format(parseISO(m.recorded_at), 'M/d HH:mm'),
       shortLabel: format(parseISO(m.recorded_at), 'M/d'),
+      date: parseISO(m.recorded_at),
       value: m[activeMetric] as number,
     }))
   const chartValues = chartData.map(d => d.value).filter((v): v is number => v != null)
@@ -400,9 +440,18 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
       if (d.value == null) return null
       const x = PAD + (i / Math.max(chartData.length - 1, 1)) * (CHART_W - PAD * 2)
       const y = PAD + ((maxV - d.value) / range) * (CHART_H - PAD * 2)
-      return { x, y, value: d.value, label: d.label, shortLabel: d.shortLabel }
+      return { x, y, date: d.date, value: d.value, label: d.label, shortLabel: d.shortLabel }
     })
     .filter((p): p is NonNullable<typeof p> => p != null)
+
+  // Event marker X positions (interpolated between data points by date)
+  const chartStartTime = points.length > 0 ? points[0].date.getTime() : 0
+  const chartEndTime = points.length > 0 ? points[points.length - 1].date.getTime() : 1
+  const chartTimeSpan = Math.max(chartEndTime - chartStartTime, 1)
+  const visibleEvents = events.filter(e => {
+    const t = parseISO(e.event_date).getTime()
+    return t >= chartStartTime - 86400000 && t <= chartEndTime + 86400000
+  })
 
   // Y-axis gridlines
   const ySteps = 4
@@ -597,6 +646,17 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
                   </text>
                 </g>
               ))}
+              {/* Event markers */}
+              {visibleEvents.map((evt, i) => {
+                const t = parseISO(evt.event_date).getTime()
+                const evtX = PAD + ((t - chartStartTime) / chartTimeSpan) * (CHART_W - PAD * 2)
+                return (
+                  <g key={evt.id}>
+                    <line x1={evtX} y1={PAD} x2={evtX} y2={CHART_H - PAD} stroke="#f97316" strokeWidth="1" strokeDasharray="3,2" />
+                    <text x={evtX + 2} y={PAD + 8 + (i % 2) * 10} fontSize="7" fill="#f97316" textAnchor="start">{evt.label}</text>
+                  </g>
+                )
+              })}
               {points.length > 1 && (
                 <polyline
                   points={points.map(p => `${p.x},${p.y}`).join(' ')}
@@ -648,6 +708,60 @@ function TrendTab({ profile, metrics, weeklyStats, activeMetric, setActiveMetric
         <p className="text-xs text-gray-400 text-center mt-1">
           {metaDef.label}（{metaDef.unit || '單位'}）
         </p>
+      </div>
+
+      {/* Event markers section */}
+      <div className="bg-white rounded-2xl border p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold text-gray-700">圖表標記</p>
+          <button
+            onClick={() => { setAddingEvent(v => !v); setNewEventDate(format(new Date(), 'yyyy-MM-dd')); setNewEventLabel('') }}
+            className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600"
+          >
+            <Plus className="h-3.5 w-3.5" />新增標記
+          </button>
+        </div>
+        {addingEvent && (
+          <div className="flex gap-2 mb-3 items-end">
+            <div className="space-y-0.5">
+              <p className="text-xs text-gray-400">日期</p>
+              <input
+                type="date"
+                value={newEventDate}
+                onChange={e => setNewEventDate(e.target.value)}
+                className="border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+              />
+            </div>
+            <div className="flex-1 space-y-0.5">
+              <p className="text-xs text-gray-400">說明</p>
+              <input
+                type="text"
+                value={newEventLabel}
+                onChange={e => setNewEventLabel(e.target.value)}
+                placeholder="例：換體脂計"
+                className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-orange-300"
+              />
+            </div>
+            <button onClick={addEvent} className="px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs hover:bg-orange-600">
+              儲存
+            </button>
+          </div>
+        )}
+        {events.length === 0 && !addingEvent ? (
+          <p className="text-xs text-gray-400">尚無標記</p>
+        ) : (
+          <div className="space-y-1">
+            {events.map(evt => (
+              <div key={evt.id} className="flex items-center justify-between text-xs">
+                <span className="text-orange-500 shrink-0 w-16">{evt.event_date.slice(5)}</span>
+                <span className="text-gray-600 flex-1">{evt.label}</span>
+                <button onClick={() => deleteEvent(evt.id)} className="text-gray-300 hover:text-red-400 p-0.5 shrink-0">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -819,7 +933,7 @@ function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
                   </p>
                   {muscleDelta != null ? (
                     <p className="text-xs text-gray-700">
-                      肌肉量 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
+                      淨體重 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
                       <span className={`ml-1.5 font-semibold ${muscleDelta > 0 ? 'text-blue-600' : muscleDelta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                         ({muscleDelta > 0 ? '+' : ''}{muscleDelta} kg)
                       </span>

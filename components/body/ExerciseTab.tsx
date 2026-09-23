@@ -130,7 +130,7 @@ export function ExerciseTab({ exercises, metrics, onDelete, onEdit }: Props) {
                 )}
                 {muscleDelta != null && (
                   <p className="text-xs text-gray-700">
-                    肌肉量 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
+                    淨體重 {muscleStart?.toFixed(1)} → {muscleEnd?.toFixed(1)} kg
                     <span className={`ml-1.5 font-semibold ${muscleDelta > 0 ? 'text-blue-600' : muscleDelta < 0 ? 'text-red-400' : 'text-gray-400'}`}>
                       ({muscleDelta > 0 ? '+' : ''}{muscleDelta} kg)
                     </span>
