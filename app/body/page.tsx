@@ -781,6 +781,7 @@ interface DietTabProps {
 function DietTab({ profile, data, metrics, exercises = [], onRefresh }: DietTabProps) {
   const goal = profile.goal
   const [weekOffset, setWeekOffset] = useState(0) // 0 = last week, 1 = two weeks ago, …
+  const [trendOffset, setTrendOffset] = useState(0) // 0 = most recent 4 weeks, 1 = prev 4 weeks, …
 
   // ── selected week range ──
   const today = new Date()
@@ -819,16 +820,17 @@ function DietTab({ profile, data, metrics, exercises = [], onRefresh }: DietTabP
   // calorie deficit vs target (positive = ate less, i.e. true deficit)
   const calDeficit = lwAvgCal != null ? profile.calorie_target - lwAvgCal : null
 
-  // last-week exercises
+  // last-week exercises split by type
   const lwExercises = exercises.filter(e => {
     const d = format(parseISO(e.recorded_at), 'yyyy-MM-dd')
     return d >= lastMonStr && d <= lastSunStr
   })
-  const lwTotalDuration = lwExercises.reduce((s, e) => s + e.duration_min, 0)
+  const lwStrength = lwExercises.filter(e => e.exercise_type === 'strength')
+  const lwCardio   = lwExercises.filter(e => e.exercise_type !== 'strength')
 
-  // 8-week body composition trend (weekly is_first_of_day averages)
-  const weekTrends = Array.from({ length: 8 }, (_, i) => {
-    const daysToMon = (dow === 0 ? 13 : dow + 6) + (i + weekOffset) * 7
+  // 4-week body composition trend (weekly is_first_of_day averages), paginated
+  const weekTrends = Array.from({ length: 4 }, (_, i) => {
+    const daysToMon = (dow === 0 ? 13 : dow + 6) + (i + trendOffset * 4) * 7
     const mon = new Date(today); mon.setDate(today.getDate() - daysToMon)
     const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
     const monStr = format(mon, 'yyyy-MM-dd')
@@ -980,20 +982,43 @@ function DietTab({ profile, data, metrics, exercises = [], onRefresh }: DietTabP
             {lwExercises.length > 0 && (
               <div className="flex items-start gap-3">
                 <div className="w-2 h-2 rounded-full bg-green-400 mt-1.5 shrink-0" />
-                <p className="text-xs text-gray-500">
-                  運動 <span className="font-semibold text-green-600">{lwExercises.length} 次</span>
-                  <span className="ml-2 text-gray-400">共 {lwTotalDuration} 分鐘</span>
-                </p>
+                <div className="flex-1 space-y-0.5">
+                  {lwStrength.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      重訓 <span className="font-semibold text-green-600">{lwStrength.length} 次</span>
+                      <span className="ml-2 text-gray-400">{lwStrength.reduce((s, e) => s + e.duration_min, 0)} 分鐘</span>
+                    </p>
+                  )}
+                  {lwCardio.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      有氧 <span className="font-semibold text-green-600">{lwCardio.length} 次</span>
+                      <span className="ml-2 text-gray-400">{lwCardio.reduce((s, e) => s + e.duration_min, 0)} 分鐘</span>
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* 8-week trend */}
+      {/* 4-week trend */}
       {weekTrends.length >= 2 && (
         <div className="bg-white rounded-2xl border p-4">
-          <p className="text-sm font-semibold text-gray-700 mb-3">近期週均趨勢</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold text-gray-700">週均體組成趨勢</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTrendOffset(o => o + 1)}
+                className="w-6 h-6 rounded-full border border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600 flex items-center justify-center text-xs"
+              >‹</button>
+              <button
+                onClick={() => setTrendOffset(o => o - 1)}
+                disabled={trendOffset === 0}
+                className="w-6 h-6 rounded-full border border-gray-200 text-gray-400 hover:border-gray-400 hover:text-gray-600 flex items-center justify-center text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+              >›</button>
+            </div>
+          </div>
           <div className="space-y-2">
             {weekTrends.map((w, i) => {
               const prev = weekTrends[i + 1]
