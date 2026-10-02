@@ -170,7 +170,7 @@ export default function BodyPage() {
   }, [tab, loadMealCorrelation])
 
   useEffect(() => {
-    if (tab === '運動' && profile) loadExercises()
+    if ((tab === '運動' || tab === '飲食連動') && profile) loadExercises()
   }, [tab, loadExercises])
 
   // weekly averages for trend chart
@@ -281,7 +281,7 @@ export default function BodyPage() {
           />
         )}
         {tab === '飲食連動' && (
-          <DietTab profile={profile} data={mealCorrelation} metrics={metrics} onRefresh={loadMealCorrelation} />
+          <DietTab profile={profile} data={mealCorrelation} metrics={metrics} exercises={exercises} onRefresh={loadMealCorrelation} />
         )}
         {tab === '運動' && (
           <ExerciseTab
@@ -774,10 +774,11 @@ interface DietTabProps {
   profile: Profile
   data: Array<{date: string, calories: number, protein: number, weight: number | null}>
   metrics: BodyMetric[]
+  exercises?: Exercise[]
   onRefresh?: () => void
 }
 
-function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
+function DietTab({ profile, data, metrics, exercises = [], onRefresh }: DietTabProps) {
   const goal = profile.goal
   const [weekOffset, setWeekOffset] = useState(0) // 0 = last week, 1 = two weeks ago, …
 
@@ -817,6 +818,36 @@ function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
 
   // calorie deficit vs target (positive = ate less, i.e. true deficit)
   const calDeficit = lwAvgCal != null ? profile.calorie_target - lwAvgCal : null
+
+  // last-week exercises
+  const lwExercises = exercises.filter(e => {
+    const d = format(parseISO(e.recorded_at), 'yyyy-MM-dd')
+    return d >= lastMonStr && d <= lastSunStr
+  })
+  const lwTotalDuration = lwExercises.reduce((s, e) => s + e.duration_min, 0)
+
+  // 8-week body composition trend (weekly is_first_of_day averages)
+  const weekTrends = Array.from({ length: 8 }, (_, i) => {
+    const daysToMon = (dow === 0 ? 13 : dow + 6) + (i + weekOffset) * 7
+    const mon = new Date(today); mon.setDate(today.getDate() - daysToMon)
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6)
+    const monStr = format(mon, 'yyyy-MM-dd')
+    const sunStr = format(sun, 'yyyy-MM-dd')
+    const wm = metrics.filter(m => {
+      const d = format(parseISO(m.recorded_at), 'yyyy-MM-dd')
+      return d >= monStr && d <= sunStr && m.is_first_of_day
+    })
+    const avg = (arr: (number | null)[]) => {
+      const vals = arr.filter((v): v is number => v != null)
+      return vals.length ? parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)) : null
+    }
+    return {
+      monStr,
+      avgWeight: avg(wm.map(m => m.weight_kg)),
+      avgFat: avg(wm.map(m => m.body_fat_pct)),
+      avgMuscle: avg(wm.map(m => m.muscle_kg)),
+    }
+  }).filter(w => w.avgWeight != null || w.avgFat != null || w.avgMuscle != null)
 
   // protein per kg body weight (using last week avg first-of-day weight)
   const lwWeights = lwMetrics.map(m => m.weight_kg).filter((v): v is number => v != null)
@@ -945,6 +976,55 @@ function DietTab({ profile, data, metrics, onRefresh }: DietTabProps) {
                 </div>
               </div>
             )}
+            {/* 訓練摘要 */}
+            {lwExercises.length > 0 && (
+              <div className="flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-green-400 mt-1.5 shrink-0" />
+                <p className="text-xs text-gray-500">
+                  運動 <span className="font-semibold text-green-600">{lwExercises.length} 次</span>
+                  <span className="ml-2 text-gray-400">共 {lwTotalDuration} 分鐘</span>
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 8-week trend */}
+      {weekTrends.length >= 2 && (
+        <div className="bg-white rounded-2xl border p-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">近期週均趨勢</p>
+          <div className="space-y-2">
+            {weekTrends.map((w, i) => {
+              const prev = weekTrends[i + 1]
+              const wD = w.avgWeight != null && prev?.avgWeight != null ? parseFloat((w.avgWeight - prev.avgWeight).toFixed(1)) : null
+              const mD = w.avgMuscle != null && prev?.avgMuscle != null ? parseFloat((w.avgMuscle - prev.avgMuscle).toFixed(1)) : null
+              const fD = w.avgFat != null && prev?.avgFat != null ? parseFloat((w.avgFat - prev.avgFat).toFixed(1)) : null
+              const [,mm,dd] = w.monStr.split('-')
+              return (
+                <div key={w.monStr} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-400 w-9 shrink-0">{Number(mm)}/{Number(dd)}</span>
+                  {w.avgWeight != null && (
+                    <span className="w-24 text-gray-700">
+                      {w.avgWeight} kg
+                      {wD != null && <span className={`ml-1 font-semibold ${wD < 0 ? 'text-green-500' : wD > 0 ? 'text-red-400' : 'text-gray-300'}`}>{wD > 0 ? '+' : ''}{wD}</span>}
+                    </span>
+                  )}
+                  {w.avgFat != null && (
+                    <span className="w-20 text-gray-500">
+                      {w.avgFat}%
+                      {fD != null && <span className={`ml-1 font-semibold ${fD < 0 ? 'text-green-500' : fD > 0 ? 'text-red-400' : 'text-gray-300'}`}>{fD > 0 ? '+' : ''}{fD}</span>}
+                    </span>
+                  )}
+                  {w.avgMuscle != null && (
+                    <span className="text-gray-500 ml-auto">
+                      淨 {w.avgMuscle}
+                      {mD != null && <span className={`ml-1 font-semibold ${mD > 0 ? 'text-blue-500' : mD < 0 ? 'text-red-400' : 'text-gray-300'}`}>{mD > 0 ? '+' : ''}{mD}</span>}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
