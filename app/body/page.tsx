@@ -331,6 +331,7 @@ export default function BodyPage() {
           profileId={profile.id}
           initial={editingMetric ?? undefined}
           lastValues={editingMetric ? undefined : (metrics.length ? metrics[metrics.length - 1] : undefined)}
+          defaultIsFirstOfDay={editingMetric ? undefined : !metrics.some(m => format(parseISO(m.recorded_at), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'))}
           onClose={() => { setShowDialog(false); setEditingMetric(null) }}
           onSaved={() => { setShowDialog(false); setEditingMetric(null); loadMetrics() }}
         />

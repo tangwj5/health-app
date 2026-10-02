@@ -155,6 +155,7 @@ interface Props {
   profileId: string
   initial?: BodyMetric
   lastValues?: BodyMetric
+  defaultIsFirstOfDay?: boolean
   onClose: () => void
   onSaved: () => void
 }
@@ -164,14 +165,14 @@ const FATPCT_ITEMS   = makeDecRange(3, 60, 0.1)
 const MUSCLE_ITEMS   = makeDecRange(10, 80, 0.1)
 const VISCERAL_ITEMS = makeDecRange(1, 30, 0.5)
 
-export function BodyMetricDialog({ profileId, initial, lastValues, onClose, onSaved }: Props) {
+export function BodyMetricDialog({ profileId, initial, lastValues, defaultIsFirstOfDay, onClose, onSaved }: Props) {
   const supabase = createClient()
   const src = initial ?? lastValues  // source for pre-filling
 
   const [recordedAt, setRecordedAt] = useState(
     initial ? toLocalDatetimeStr(initial.recorded_at) : nowLocalDatetimeStr()
   )
-  const [isFirstOfDay, setIsFirstOfDay] = useState(initial?.is_first_of_day ?? false)
+  const [isFirstOfDay, setIsFirstOfDay] = useState(initial?.is_first_of_day ?? defaultIsFirstOfDay ?? false)
   const [note, setNote] = useState(initial?.note ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
