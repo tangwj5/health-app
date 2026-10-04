@@ -195,6 +195,21 @@ export interface TrackerLog {
   created_at: string
 }
 
+export interface ReceiptTempItem {
+  id: string
+  profile_id: string
+  purchase_date: string
+  store: string | null
+  name: string
+  price: number
+  quantity: number
+  category: '食材' | '消耗品' | '其他'
+  is_processed: boolean
+  linked_product_id: string | null
+  note: string | null
+  created_at: string
+}
+
 export interface DayNutrition {
   calories: number
   protein: number

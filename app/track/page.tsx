@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2, ChevronRight, Package } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2, ChevronRight, Package, ScanLine } from 'lucide-react'
 import { computeScheduleStatus, scheduleLabel } from '@/lib/schedule'
+import { ReceiptScanDialog } from '@/components/track/ReceiptScanDialog'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile, ScheduleType, ScheduleConfig, ConsumableItem, ConsumableCategory } from '@/types'
 
 const TABS = ['習慣', '頻率事項', '消耗品'] as const
@@ -1097,6 +1098,7 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
   const [activeCategory, setActiveCategory] = useState<ConsumableCategory | 'all'>('all')
   const [showAddItem, setShowAddItem] = useState(false)
   const [editingItem, setEditingItem] = useState<ConsumableItem | null>(null)
+  const [showScan, setShowScan] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -1134,12 +1136,20 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
             >{c === 'all' ? '全部' : c}</button>
           ))}
         </div>
-        <button
-          onClick={() => setShowAddItem(true)}
-          className="ml-3 shrink-0 flex items-center gap-1 text-xs text-green-600 font-medium"
-        >
-          <Plus className="h-4 w-4" />新增
-        </button>
+        <div className="ml-3 shrink-0 flex items-center gap-2">
+          <button
+            onClick={() => setShowScan(true)}
+            className="flex items-center gap-1 text-xs text-blue-500 font-medium"
+          >
+            <ScanLine className="h-4 w-4" />掃收據
+          </button>
+          <button
+            onClick={() => setShowAddItem(true)}
+            className="flex items-center gap-1 text-xs text-green-600 font-medium"
+          >
+            <Plus className="h-4 w-4" />新增
+          </button>
+        </div>
       </div>
 
       {displayed.length === 0 ? (
@@ -1183,6 +1193,13 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
           initial={editingItem}
           onClose={() => setEditingItem(null)}
           onSaved={() => { setEditingItem(null); load() }}
+        />
+      )}
+      {showScan && (
+        <ReceiptScanDialog
+          profileId={profile.id}
+          onClose={() => setShowScan(false)}
+          onSaved={() => { setShowScan(false); load() }}
         />
       )}
     </div>
