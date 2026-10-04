@@ -94,6 +94,44 @@ export interface MealPresetItem {
 export type ExerciseType = 'walking' | 'cycling' | 'strength'
 export type Intensity = 'easy' | 'moderate' | 'hard'
 
+export type ConsumableCategory = '食品飲料' | '保養藥品' | '個人護理' | '餐廚清潔' | '其他'
+
+export interface ConsumableItem {
+  id: string
+  profile_id: string
+  name: string
+  category: ConsumableCategory
+  unit: string
+  photo_url: string | null
+  created_at: string
+}
+
+export interface ConsumableProduct {
+  id: string
+  item_id: string
+  profile_id: string
+  name: string
+  brand: string | null
+  capacity: number | null
+  photo_url: string | null
+  estimated_days: number | null
+  note: string | null
+  created_at: string
+}
+
+export interface ConsumablePurchase {
+  id: string
+  product_id: string
+  profile_id: string
+  purchase_date: string
+  store: string
+  price: number
+  quantity: number
+  is_promotion: boolean
+  note: string | null
+  created_at: string
+}
+
 export interface Exercise {
   id: string
   profile_id: string

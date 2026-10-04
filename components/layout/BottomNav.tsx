@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: '/diary', label: '飲食日記', icon: BookOpen },
   { href: '/search', label: '搜尋食物', icon: Search },
   { href: '/body', label: '體組成', icon: Activity },
-  { href: '/track', label: '追蹤', icon: ListChecks },
+  { href: '/track', label: '消耗品', icon: ListChecks },
   { href: '/settings', label: '設定', icon: Settings },
 ]
 
