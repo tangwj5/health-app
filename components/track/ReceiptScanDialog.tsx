@@ -3,8 +3,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
-import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check } from 'lucide-react'
-import type { ConsumableProduct } from '@/types'
+import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check, Plus } from 'lucide-react'
+import type { ConsumableProduct, ConsumableCategory } from '@/types'
 
 export type ItemCategory = '食物' | '食物且消耗品' | '用品' | '用品且消耗品'
 
@@ -15,6 +15,13 @@ const CATEGORY_STYLES: Record<ItemCategory, string> = {
   '食物且消耗品': 'bg-teal-500 text-white border-teal-500',
   '用品':       'bg-orange-400 text-white border-orange-400',
   '用品且消耗品': 'bg-blue-500 text-white border-blue-500',
+}
+
+const CONSUMABLE_CATEGORIES: ConsumableCategory[] = ['食品飲料', '保養藥品', '個人護理', '餐廚清潔', '其他']
+const CONSUMABLE_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶']
+
+function defaultConsumableCategory(itemCat: ItemCategory): ConsumableCategory {
+  return (itemCat === '食物且消耗品') ? '食品飲料' : '餐廚清潔'
 }
 
 function isConsumable(cat: ItemCategory) {
@@ -39,6 +46,14 @@ interface ProductOption extends ConsumableProduct {
   item_name: string
 }
 
+interface QuickCreateState {
+  itemName: string
+  productName: string
+  category: ConsumableCategory
+  unit: string
+  saving: boolean
+}
+
 export function ReceiptScanDialog({
   profileId,
   onClose,
@@ -61,23 +76,25 @@ export function ReceiptScanDialog({
   const [linkedProduct, setLinkedProduct] = useState<Record<number, string>>({})
   const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null)
   const [productSearch, setProductSearch] = useState('')
+  const [quickCreate, setQuickCreate] = useState<Record<number, QuickCreateState>>({})
 
   useEffect(() => {
-    async function loadProducts() {
-      const { data } = await supabase
-        .from('consumable_products')
-        .select('*, consumable_items(name)')
-        .eq('profile_id', profileId)
-        .order('created_at', { ascending: false })
-      if (data) {
-        setProducts((data as any[]).map(p => ({
-          ...p,
-          item_name: p.consumable_items?.name ?? '',
-        })))
-      }
-    }
     loadProducts()
   }, [profileId])
+
+  async function loadProducts() {
+    const { data } = await supabase
+      .from('consumable_products')
+      .select('*, consumable_items(name)')
+      .eq('profile_id', profileId)
+      .order('created_at', { ascending: false })
+    if (data) {
+      setProducts((data as any[]).map(p => ({
+        ...p,
+        item_name: p.consumable_items?.name ?? '',
+      })))
+    }
+  }
 
   function fileToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -118,6 +135,54 @@ export function ReceiptScanDialog({
     if (!isConsumable(cat)) {
       setLinkedProduct(prev => { const n = { ...prev }; delete n[idx]; return n })
       if (pickerOpenIdx === idx) setPickerOpenIdx(null)
+      setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
+    }
+  }
+
+  function openPicker(idx: number) {
+    setPickerOpenIdx(pickerOpenIdx === idx ? null : idx)
+    setProductSearch('')
+    setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
+  }
+
+  function startQuickCreate(idx: number, suggestedName: string) {
+    const cat = items[idx].category
+    setQuickCreate(prev => ({
+      ...prev,
+      [idx]: {
+        itemName: suggestedName,
+        productName: suggestedName,
+        category: defaultConsumableCategory(cat),
+        unit: 'ml',
+        saving: false,
+      },
+    }))
+  }
+
+  async function saveQuickCreate(idx: number) {
+    const qc = quickCreate[idx]
+    if (!qc || !qc.itemName.trim()) return
+    setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], saving: true } }))
+    try {
+      const { data: itemData } = await supabase
+        .from('consumable_items')
+        .insert({ profile_id: profileId, name: qc.itemName.trim(), category: qc.category, unit: qc.unit })
+        .select().single()
+      if (!itemData) throw new Error('建立品項失敗')
+
+      const { data: prodData } = await supabase
+        .from('consumable_products')
+        .insert({ item_id: itemData.id, profile_id: profileId, name: qc.productName.trim() || qc.itemName.trim() })
+        .select().single()
+      if (!prodData) throw new Error('建立商品失敗')
+
+      const newProd: ProductOption = { ...(prodData as ConsumableProduct), item_name: qc.itemName.trim() }
+      setProducts(prev => [newProd, ...prev])
+      setLinkedProduct(prev => ({ ...prev, [idx]: prodData.id }))
+      setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
+      setPickerOpenIdx(null)
+    } catch (e: any) {
+      setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], saving: false } }))
     }
   }
 
@@ -125,6 +190,7 @@ export function ReceiptScanDialog({
     setLinkedProduct(prev => ({ ...prev, [idx]: productId }))
     setPickerOpenIdx(null)
     setProductSearch('')
+    setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
   }
 
   function unlinkProduct(idx: number) {
@@ -139,7 +205,6 @@ export function ReceiptScanDialog({
         const item = items[i]
         const productId = linkedProduct[i]
 
-        // 全部存入 receipt_temp_items（供對帳用）
         await supabase.from('receipt_temp_items').insert({
           profile_id: profileId,
           purchase_date: purchaseDate,
@@ -150,7 +215,6 @@ export function ReceiptScanDialog({
           category: item.category,
         })
 
-        // 消耗品且已連結商品 → 同步建採購紀錄
         if (isConsumable(item.category) && productId) {
           await supabase.from('consumable_purchases').insert({
             product_id: productId,
@@ -175,9 +239,11 @@ export function ReceiptScanDialog({
     !productSearch || p.name.includes(productSearch) || p.item_name.includes(productSearch)
   )
 
-  const foodTotal = items.filter(i => i.category === '食物' || i.category === '食物且消耗品')
+  const foodTotal = items
+    .filter(i => i.category === '食物' || i.category === '食物且消耗品')
     .reduce((s, i) => s + i.price * i.quantity, 0)
-  const goodsTotal = items.filter(i => i.category === '用品' || i.category === '用品且消耗品')
+  const goodsTotal = items
+    .filter(i => i.category === '用品' || i.category === '用品且消耗品')
     .reduce((s, i) => s + i.price * i.quantity, 0)
   const linkedCount = Object.keys(linkedProduct).length
   const consumableCount = items.filter(i => isConsumable(i.category)).length
@@ -204,7 +270,7 @@ export function ReceiptScanDialog({
                 <p><span className="font-medium text-orange-500">用品</span>：一次性用品，計入購物對帳</p>
                 <p><span className="font-medium text-blue-600">用品且消耗品</span>：同上 + 追蹤存量</p>
               </div>
-              <p className="text-gray-400 pt-1">所有品項均儲存，對帳 = 食（1+2）＋購（3+4）</p>
+              <p className="text-gray-400 pt-1">消耗品可直接在此新增品項並建立採購紀錄</p>
             </div>
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
@@ -243,8 +309,7 @@ export function ReceiptScanDialog({
               </div>
             </div>
 
-            {/* Summary */}
-            <div className="px-5 pb-2 flex gap-3 shrink-0 text-xs">
+            <div className="px-5 pb-2 flex gap-3 items-center shrink-0 text-xs">
               <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">食 ${foodTotal.toFixed(0)}</span>
               <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">購 ${goodsTotal.toFixed(0)}</span>
               {consumableCount > 0 && (
@@ -264,6 +329,7 @@ export function ReceiptScanDialog({
                 const linkedProd = products.find(p => p.id === linked)
                 const isPickerOpen = pickerOpenIdx === idx
                 const consumable = isConsumable(item.category)
+                const qc = quickCreate[idx]
 
                 return (
                   <div key={idx} className="bg-gray-50 rounded-2xl border overflow-hidden">
@@ -272,29 +338,23 @@ export function ReceiptScanDialog({
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                           <p className={`text-xs mt-0.5 ${item.price < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                            ${item.price}
-                            {item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
+                            ${item.price}{item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
                           </p>
                         </div>
                       </div>
-                      {/* 2x2 category grid */}
                       <div className="grid grid-cols-2 gap-1.5">
                         {CATEGORIES.map(cat => (
-                          <button
-                            key={cat}
-                            onClick={() => setCategory(idx, cat)}
+                          <button key={cat} onClick={() => setCategory(idx, cat)}
                             className={`py-1.5 text-xs rounded-lg border transition-colors ${
                               item.category === cat ? CATEGORY_STYLES[cat] : 'border-gray-200 text-gray-400 bg-white'
                             }`}
-                          >
-                            {cat}
-                          </button>
+                          >{cat}</button>
                         ))}
                       </div>
                     </div>
 
                     {consumable && (
-                      <div className="border-t px-3 pb-2">
+                      <div className="border-t px-3 pb-3">
                         {linked && linkedProd ? (
                           <div className="flex items-center gap-2 pt-2">
                             <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
@@ -303,33 +363,84 @@ export function ReceiptScanDialog({
                             </span>
                             <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => { setPickerOpenIdx(isPickerOpen ? null : idx); setProductSearch('') }}
-                            className="mt-2 flex items-center gap-1 text-xs text-blue-500"
-                          >
-                            {isPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isPickerOpen ? '收起' : '連結商品（同步建立採購紀錄）'}
-                          </button>
-                        )}
-
-                        {isPickerOpen && (
+                        ) : qc ? (
+                          /* Quick-create form */
                           <div className="mt-2 space-y-2">
-                            <input type="text" placeholder="搜尋商品名稱…" value={productSearch}
-                              onChange={e => setProductSearch(e.target.value)} autoFocus
-                              className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                            <div className="max-h-36 overflow-y-auto space-y-1">
-                              {filteredProducts.length === 0 ? (
-                                <p className="text-xs text-gray-400 py-2 text-center">無符合商品；不連結仍會暫存待處理</p>
-                              ) : filteredProducts.map(p => (
-                                <button key={p.id} onClick={() => linkProduct(idx, p.id)}
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors">
-                                  <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
-                                  <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
-                                </button>
-                              ))}
+                            <p className="text-xs font-medium text-gray-600">新增消耗品</p>
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-0.5">品項名稱（大類）</label>
+                              <input type="text" value={qc.itemName} autoFocus
+                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], itemName: e.target.value } }))}
+                                placeholder="例：洗碗精、防曬乳"
+                                className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-0.5">商品名稱（選填，預設同品項）</label>
+                              <input type="text" value={qc.productName}
+                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], productName: e.target.value } }))}
+                                placeholder="例：好神拖洗碗精 500ml"
+                                className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                            </div>
+                            <div className="flex gap-2">
+                              <div className="flex-1">
+                                <label className="text-xs text-gray-400 block mb-0.5">類別</label>
+                                <select value={qc.category}
+                                  onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], category: e.target.value as ConsumableCategory } }))}
+                                  className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                                  {CONSUMABLE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-xs text-gray-400 block mb-0.5">單位</label>
+                                <select value={qc.unit}
+                                  onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], unit: e.target.value } }))}
+                                  className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                                  {CONSUMABLE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => saveQuickCreate(idx)} disabled={qc.saving || !qc.itemName.trim()}
+                                className="flex-1 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-medium disabled:opacity-40">
+                                {qc.saving ? '建立中…' : '建立並連結'}
+                              </button>
+                              <button onClick={() => setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })}
+                                className="flex-1 py-1.5 rounded-lg border text-xs text-gray-500">取消</button>
                             </div>
                           </div>
+                        ) : (
+                          <>
+                            <button onClick={() => openPicker(idx)}
+                              className="mt-2 flex items-center gap-1 text-xs text-blue-500">
+                              {isPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                              {isPickerOpen ? '收起' : '連結商品（建立採購紀錄）'}
+                            </button>
+
+                            {isPickerOpen && (
+                              <div className="mt-2 space-y-2">
+                                <input type="text" placeholder="搜尋現有商品…" value={productSearch}
+                                  onChange={e => setProductSearch(e.target.value)} autoFocus
+                                  className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                                <div className="max-h-32 overflow-y-auto space-y-1">
+                                  {filteredProducts.map(p => (
+                                    <button key={p.id} onClick={() => linkProduct(idx, p.id)}
+                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors">
+                                      <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
+                                      <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                                {/* Quick create option */}
+                                <button
+                                  onClick={() => { startQuickCreate(idx, item.name); setPickerOpenIdx(null) }}
+                                  className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-blue-500 text-xs hover:bg-blue-50 transition-colors"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  新增「{item.name}」為消耗品
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
