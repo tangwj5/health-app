@@ -203,7 +203,7 @@ export interface ReceiptTempItem {
   name: string
   price: number
   quantity: number
-  category: '食材' | '消耗品' | '其他'
+  category: '食物' | '食物且消耗品' | '用品' | '用品且消耗品'
   is_processed: boolean
   linked_product_id: string | null
   note: string | null

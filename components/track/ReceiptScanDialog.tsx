@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
-import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check, Plus } from 'lucide-react'
+import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check, Plus, Scissors } from 'lucide-react'
 import type { ConsumableProduct, ConsumableCategory } from '@/types'
 
 export type ItemCategory = '食物' | '食物且消耗品' | '用品' | '用品且消耗品'
@@ -70,17 +70,26 @@ export function ReceiptScanDialog({
   const [step, setStep] = useState<'pick' | 'scanning' | 'review' | 'saving'>('pick')
   const [error, setError] = useState<string | null>(null)
   const [items, setItems] = useState<ParsedItem[]>([])
-  const [store, setStore] = useState('')
+  const STORES = ['全聯', '好市多', '7-11', '全家', '寶雅']
+  const [store, setStore] = useState('全聯')
   const [purchaseDate, setPurchaseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [products, setProducts] = useState<ProductOption[]>([])
   const [linkedProduct, setLinkedProduct] = useState<Record<number, string>>({})
   const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null)
   const [productSearch, setProductSearch] = useState('')
   const [quickCreate, setQuickCreate] = useState<Record<number, QuickCreateState>>({})
+  // discountTarget[discountIdx] = targetItemIdx — null means unassigned
+  const [discountTarget, setDiscountTarget] = useState<Record<number, number | null>>({})
+  const [discountPickerIdx, setDiscountPickerIdx] = useState<number | null>(null)
 
+  useEffect(() => { loadProducts() }, [profileId])
+
+  // Auto-detect discount rows and initialise to null
   useEffect(() => {
-    loadProducts()
-  }, [profileId])
+    const targets: Record<number, number | null> = {}
+    items.forEach((item, i) => { if (item.price < 0) targets[i] = null })
+    setDiscountTarget(targets)
+  }, [items.length])
 
   async function loadProducts() {
     const { data } = await supabase
@@ -130,6 +139,22 @@ export function ReceiptScanDialog({
     }
   }
 
+  // Effective price = item.price + all discounts applied to this item
+  function effectivePrice(idx: number): number {
+    const base = items[idx].price
+    const discounts = Object.entries(discountTarget)
+      .filter(([, target]) => target === idx)
+      .reduce((sum, [discIdx]) => sum + items[Number(discIdx)].price, 0)
+    return base + discounts
+  }
+
+  // Indices of discount rows that are assigned to a given item
+  function appliedDiscounts(idx: number): number[] {
+    return Object.entries(discountTarget)
+      .filter(([, target]) => target === idx)
+      .map(([discIdx]) => Number(discIdx))
+  }
+
   function setCategory(idx: number, cat: ItemCategory) {
     setItems(prev => prev.map((item, i) => i === idx ? { ...item, category: cat } : item))
     if (!isConsumable(cat)) {
@@ -139,6 +164,22 @@ export function ReceiptScanDialog({
     }
   }
 
+  function assignDiscount(discountIdx: number, targetIdx: number | null) {
+    setDiscountTarget(prev => ({ ...prev, [discountIdx]: targetIdx }))
+    setDiscountPickerIdx(null)
+  }
+
+  function linkProduct(idx: number, productId: string) {
+    setLinkedProduct(prev => ({ ...prev, [idx]: productId }))
+    setPickerOpenIdx(null)
+    setProductSearch('')
+    setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
+  }
+
+  function unlinkProduct(idx: number) {
+    setLinkedProduct(prev => { const n = { ...prev }; delete n[idx]; return n })
+  }
+
   function openPicker(idx: number) {
     setPickerOpenIdx(pickerOpenIdx === idx ? null : idx)
     setProductSearch('')
@@ -146,13 +187,12 @@ export function ReceiptScanDialog({
   }
 
   function startQuickCreate(idx: number, suggestedName: string) {
-    const cat = items[idx].category
     setQuickCreate(prev => ({
       ...prev,
       [idx]: {
         itemName: suggestedName,
         productName: suggestedName,
-        category: defaultConsumableCategory(cat),
+        category: defaultConsumableCategory(items[idx].category),
         unit: 'ml',
         saving: false,
       },
@@ -168,41 +208,35 @@ export function ReceiptScanDialog({
         .from('consumable_items')
         .insert({ profile_id: profileId, name: qc.itemName.trim(), category: qc.category, unit: qc.unit })
         .select().single()
-      if (!itemData) throw new Error('建立品項失敗')
-
+      if (!itemData) throw new Error()
       const { data: prodData } = await supabase
         .from('consumable_products')
         .insert({ item_id: itemData.id, profile_id: profileId, name: qc.productName.trim() || qc.itemName.trim() })
         .select().single()
-      if (!prodData) throw new Error('建立商品失敗')
-
-      const newProd: ProductOption = { ...(prodData as ConsumableProduct), item_name: qc.itemName.trim() }
-      setProducts(prev => [newProd, ...prev])
+      if (!prodData) throw new Error()
+      setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: qc.itemName.trim() }, ...prev])
       setLinkedProduct(prev => ({ ...prev, [idx]: prodData.id }))
       setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
       setPickerOpenIdx(null)
-    } catch (e: any) {
+    } catch {
       setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], saving: false } }))
     }
   }
 
-  function linkProduct(idx: number, productId: string) {
-    setLinkedProduct(prev => ({ ...prev, [idx]: productId }))
-    setPickerOpenIdx(null)
-    setProductSearch('')
-    setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
-  }
-
-  function unlinkProduct(idx: number) {
-    setLinkedProduct(prev => { const n = { ...prev }; delete n[idx]; return n })
-  }
+  const isDiscountRow = (idx: number) => items[idx]?.price < 0
+  const isAbsorbedDiscount = (idx: number) =>
+    isDiscountRow(idx) && discountTarget[idx] != null
 
   async function handleSave() {
     setStep('saving')
     try {
       const storeVal = store.trim() || '未知通路'
       for (let i = 0; i < items.length; i++) {
+        // Skip discount rows that have been merged into another item
+        if (isAbsorbedDiscount(i)) continue
+
         const item = items[i]
+        const netPrice = effectivePrice(i)
         const productId = linkedProduct[i]
 
         await supabase.from('receipt_temp_items').insert({
@@ -210,7 +244,7 @@ export function ReceiptScanDialog({
           purchase_date: purchaseDate,
           store: storeVal,
           name: item.name,
-          price: item.price,
+          price: netPrice,
           quantity: item.quantity,
           category: item.category,
         })
@@ -221,9 +255,9 @@ export function ReceiptScanDialog({
             profile_id: profileId,
             purchase_date: purchaseDate,
             store: storeVal,
-            price: item.price,
+            price: netPrice,
             quantity: item.quantity,
-            is_promotion: false,
+            is_promotion: netPrice < item.price, // original price was higher → promotion
             note: item.name,
           })
         }
@@ -239,14 +273,26 @@ export function ReceiptScanDialog({
     !productSearch || p.name.includes(productSearch) || p.item_name.includes(productSearch)
   )
 
-  const foodTotal = items
-    .filter(i => i.category === '食物' || i.category === '食物且消耗品')
-    .reduce((s, i) => s + i.price * i.quantity, 0)
-  const goodsTotal = items
-    .filter(i => i.category === '用品' || i.category === '用品且消耗品')
-    .reduce((s, i) => s + i.price * i.quantity, 0)
+  const discountIndices = Object.keys(discountTarget).map(Number)
+  // Regular (non-discount) items for discount picker
+  const regularItems = items.map((item, i) => ({ item, i })).filter(({ i }) => !isDiscountRow(i))
+
+  const foodTotalCalc = items.reduce((s, item, i) => {
+    if (isAbsorbedDiscount(i)) return s
+    if (item.category !== '食物' && item.category !== '食物且消耗品') return s
+    return s + effectivePrice(i) * item.quantity
+  }, 0)
+  const goodsTotalCalc = items.reduce((s, item, i) => {
+    if (isAbsorbedDiscount(i)) return s
+    if (item.category !== '用品' && item.category !== '用品且消耗品') return s
+    return s + effectivePrice(i) * item.quantity
+  }, 0)
+  const unassignedDiscountTotal = discountIndices
+    .filter(i => discountTarget[i] == null)
+    .reduce((s, i) => s + items[i].price * items[i].quantity, 0)
+  const consumableCount = items.filter((item, i) => !isDiscountRow(i) && isConsumable(item.category)).length
   const linkedCount = Object.keys(linkedProduct).length
-  const consumableCount = items.filter(i => isConsumable(i.category)).length
+  const savedRowCount = items.filter((_, i) => !isAbsorbedDiscount(i)).length
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
@@ -260,9 +306,7 @@ export function ReceiptScanDialog({
 
         {step === 'pick' && (
           <div className="px-5 pb-6 space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-600">{error}</div>
-            )}
+            {error && <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-600">{error}</div>}
             <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1.5">
               <div className="grid grid-cols-2 gap-x-3 gap-y-1">
                 <p><span className="font-medium text-green-600">食物</span>：食品飲料，計入飲食對帳</p>
@@ -270,7 +314,7 @@ export function ReceiptScanDialog({
                 <p><span className="font-medium text-orange-500">用品</span>：一次性用品，計入購物對帳</p>
                 <p><span className="font-medium text-blue-600">用品且消耗品</span>：同上 + 追蹤存量</p>
               </div>
-              <p className="text-gray-400 pt-1">消耗品可直接在此新增品項並建立採購紀錄</p>
+              <p className="text-gray-400 pt-1">折扣/COUPON 可套用至指定品項，自動計算淨價</p>
             </div>
             <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
@@ -304,55 +348,127 @@ export function ReceiptScanDialog({
               </div>
               <div className="flex-1">
                 <label className="text-xs text-gray-400 block mb-1">通路</label>
-                <input type="text" value={store} onChange={e => setStore(e.target.value)} placeholder="例：全聯、好市多"
+                <input list="store-list" value={store} onChange={e => setStore(e.target.value)}
+                  placeholder="選擇或輸入通路"
                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+                <datalist id="store-list">
+                  {STORES.map(s => <option key={s} value={s} />)}
+                </datalist>
               </div>
             </div>
 
-            <div className="px-5 pb-2 flex gap-3 items-center shrink-0 text-xs">
-              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">食 ${foodTotal.toFixed(0)}</span>
-              <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">購 ${goodsTotal.toFixed(0)}</span>
+            <div className="px-5 pb-2 flex gap-2 items-center shrink-0 flex-wrap text-xs">
+              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">食 ${foodTotalCalc.toFixed(0)}</span>
+              <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">購 ${goodsTotalCalc.toFixed(0)}</span>
+              {unassignedDiscountTotal < 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-red-100 text-red-500">未套用折扣 ${unassignedDiscountTotal.toFixed(0)}</span>
+              )}
               {consumableCount > 0 && (
-                <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-600">
-                  消耗品 {consumableCount}（連結 {linkedCount}）
-                </span>
+                <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-600">消耗品{consumableCount}（連結{linkedCount}）</span>
               )}
             </div>
 
-            {error && (
-              <div className="mx-5 mb-2 bg-red-50 border border-red-100 rounded-xl px-4 py-2 text-xs text-red-600 shrink-0">{error}</div>
-            )}
+            {error && <div className="mx-5 mb-2 bg-red-50 border border-red-100 rounded-xl px-4 py-2 text-xs text-red-600 shrink-0">{error}</div>}
 
             <div className="overflow-y-auto flex-1 px-5 pb-3 space-y-2">
               {items.map((item, idx) => {
+                const isDiscount = isDiscountRow(idx)
+                const absorbed = isAbsorbedDiscount(idx)
+                const netPrice = effectivePrice(idx)
+                const myDiscounts = appliedDiscounts(idx)
                 const linked = linkedProduct[idx]
                 const linkedProd = products.find(p => p.id === linked)
                 const isPickerOpen = pickerOpenIdx === idx
-                const consumable = isConsumable(item.category)
                 const qc = quickCreate[idx]
+                const consumable = !isDiscount && isConsumable(item.category)
+                const discPickerOpen = discountPickerIdx === idx
+
+                if (absorbed) {
+                  // Show as collapsed tag on parent item — don't render separately
+                  return null
+                }
 
                 return (
-                  <div key={idx} className="bg-gray-50 rounded-2xl border overflow-hidden">
+                  <div key={idx} className={`rounded-2xl border overflow-hidden ${isDiscount ? 'border-red-200 bg-red-50' : 'bg-gray-50'}`}>
                     <div className="p-3">
                       <div className="flex items-start gap-2 mb-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                          <p className={`text-xs mt-0.5 ${item.price < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                            ${item.price}{item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            {isDiscount && <Scissors className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+                            <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className={`text-xs ${item.price < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                              原價 ${item.price}{item.quantity > 1 && ` × ${item.quantity}`}
+                            </p>
+                            {myDiscounts.length > 0 && (
+                              <>
+                                <span className="text-xs text-gray-300">→</span>
+                                <p className="text-xs font-semibold text-green-600">淨價 ${netPrice}</p>
+                                <span className="text-xs text-gray-400">
+                                  （折 ${(item.price - netPrice) * -1}）
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          {/* Applied discounts tags */}
+                          {myDiscounts.map(di => (
+                            <div key={di} className="mt-1 flex items-center gap-1">
+                              <span className="text-xs bg-red-100 text-red-500 rounded-full px-2 py-0.5">
+                                {items[di].name} ${items[di].price}
+                              </span>
+                              <button onClick={() => assignDiscount(di, null)}
+                                className="text-xs text-gray-400 underline">移除</button>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {CATEGORIES.map(cat => (
-                          <button key={cat} onClick={() => setCategory(idx, cat)}
-                            className={`py-1.5 text-xs rounded-lg border transition-colors ${
-                              item.category === cat ? CATEGORY_STYLES[cat] : 'border-gray-200 text-gray-400 bg-white'
-                            }`}
-                          >{cat}</button>
-                        ))}
-                      </div>
+
+                      {/* Discount row: assign to item */}
+                      {isDiscount ? (
+                        <div>
+                          <button
+                            onClick={() => setDiscountPickerIdx(discPickerOpen ? null : idx)}
+                            className={`flex items-center gap-1 text-xs ${discountTarget[idx] == null ? 'text-red-400' : 'text-green-600'}`}
+                          >
+                            {discPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            {discountTarget[idx] != null
+                              ? `已套用至：${items[discountTarget[idx]!].name}`
+                              : '套用至哪個品項？（未套用將單獨儲存）'}
+                          </button>
+                          {discPickerOpen && (
+                            <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                              {regularItems.map(({ item: rItem, i }) => (
+                                <button key={i} onClick={() => assignDiscount(idx, i)}
+                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-white transition-colors text-xs">
+                                  <span className="font-medium text-gray-800">{rItem.name}</span>
+                                  <span className="text-gray-400 ml-1">${effectivePrice(i)}</span>
+                                </button>
+                              ))}
+                              {discountTarget[idx] != null && (
+                                <button onClick={() => assignDiscount(idx, null)}
+                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-white transition-colors text-xs text-red-400">
+                                  取消套用（單獨儲存）
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Category grid */
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {CATEGORIES.map(cat => (
+                            <button key={cat} onClick={() => setCategory(idx, cat)}
+                              className={`py-1.5 text-xs rounded-lg border transition-colors ${
+                                item.category === cat ? CATEGORY_STYLES[cat] : 'border-gray-200 text-gray-400 bg-white'
+                              }`}
+                            >{cat}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
+                    {/* Consumable product linking */}
                     {consumable && (
                       <div className="border-t px-3 pb-3">
                         {linked && linkedProd ? (
@@ -361,10 +477,12 @@ export function ReceiptScanDialog({
                             <span className="text-xs text-gray-700 flex-1 truncate">
                               {linkedProd.item_name} · {linkedProd.name}
                             </span>
+                            {myDiscounts.length > 0 && (
+                              <span className="text-xs text-green-600 shrink-0">採購單價 ${netPrice}</span>
+                            )}
                             <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
                           </div>
                         ) : qc ? (
-                          /* Quick-create form */
                           <div className="mt-2 space-y-2">
                             <p className="text-xs font-medium text-gray-600">新增消耗品</p>
                             <div>
@@ -375,7 +493,7 @@ export function ReceiptScanDialog({
                                 className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                             </div>
                             <div>
-                              <label className="text-xs text-gray-400 block mb-0.5">商品名稱（選填，預設同品項）</label>
+                              <label className="text-xs text-gray-400 block mb-0.5">商品名稱（選填）</label>
                               <input type="text" value={qc.productName}
                                 onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], productName: e.target.value } }))}
                                 placeholder="例：好神拖洗碗精 500ml"
@@ -415,11 +533,10 @@ export function ReceiptScanDialog({
                               {isPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                               {isPickerOpen ? '收起' : '連結商品（建立採購紀錄）'}
                             </button>
-
                             {isPickerOpen && (
                               <div className="mt-2 space-y-2">
-                                <input type="text" placeholder="搜尋現有商品…" value={productSearch}
-                                  onChange={e => setProductSearch(e.target.value)} autoFocus
+                                <input type="text" placeholder="搜尋現有商品…" value={productSearch} autoFocus
+                                  onChange={e => setProductSearch(e.target.value)}
                                   className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                 <div className="max-h-32 overflow-y-auto space-y-1">
                                   {filteredProducts.map(p => (
@@ -430,13 +547,9 @@ export function ReceiptScanDialog({
                                     </button>
                                   ))}
                                 </div>
-                                {/* Quick create option */}
-                                <button
-                                  onClick={() => { startQuickCreate(idx, item.name); setPickerOpenIdx(null) }}
-                                  className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-blue-500 text-xs hover:bg-blue-50 transition-colors"
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  新增「{item.name}」為消耗品
+                                <button onClick={() => { startQuickCreate(idx, item.name); setPickerOpenIdx(null) }}
+                                  className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-blue-500 text-xs hover:bg-blue-50 transition-colors">
+                                  <Plus className="h-3.5 w-3.5" />新增「{item.name}」為消耗品
                                 </button>
                               </div>
                             )}
@@ -453,7 +566,7 @@ export function ReceiptScanDialog({
               <div className="flex gap-3">
                 <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm text-gray-500">取消</button>
                 <button onClick={handleSave} className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-medium">
-                  儲存全部（{items.length} 筆）
+                  儲存（{savedRowCount} 筆）
                 </button>
               </div>
             </div>
