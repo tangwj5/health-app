@@ -6,7 +6,27 @@ import { format } from 'date-fns'
 import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import type { ConsumableProduct } from '@/types'
 
-type ItemCategory = '消耗品' | '記帳'
+export type ItemCategory = '食物' | '食物且消耗品' | '用品' | '用品且消耗品'
+
+const CATEGORIES: ItemCategory[] = ['食物', '食物且消耗品', '用品', '用品且消耗品']
+
+const CATEGORY_STYLES: Record<ItemCategory, string> = {
+  '食物':       'bg-green-500 text-white border-green-500',
+  '食物且消耗品': 'bg-teal-500 text-white border-teal-500',
+  '用品':       'bg-orange-400 text-white border-orange-400',
+  '用品且消耗品': 'bg-blue-500 text-white border-blue-500',
+}
+
+function isConsumable(cat: ItemCategory) {
+  return cat === '食物且消耗品' || cat === '用品且消耗品'
+}
+
+function geminiCategoryToLocal(cat: string): ItemCategory {
+  if (cat === '食物且消耗品') return '食物且消耗品'
+  if (cat === '用品且消耗品') return '用品且消耗品'
+  if (cat === '用品') return '用品'
+  return '食物'
+}
 
 interface ParsedItem {
   name: string
@@ -17,10 +37,6 @@ interface ParsedItem {
 
 interface ProductOption extends ConsumableProduct {
   item_name: string
-}
-
-function geminiCategoryToLocal(cat: string): ItemCategory {
-  return cat === '消耗品' ? '消耗品' : '記帳'
 }
 
 export function ReceiptScanDialog({
@@ -87,7 +103,7 @@ export function ReceiptScanDialog({
       if (!Array.isArray(data.items) || data.items.length === 0) throw new Error('未能識別任何品項')
       setItems(data.items.map((it: any) => ({
         ...it,
-        category: geminiCategoryToLocal(it.category ?? '記帳'),
+        category: geminiCategoryToLocal(it.category ?? '食物'),
       })))
       if (data.store) setStore(data.store)
       setStep('review')
@@ -99,7 +115,7 @@ export function ReceiptScanDialog({
 
   function setCategory(idx: number, cat: ItemCategory) {
     setItems(prev => prev.map((item, i) => i === idx ? { ...item, category: cat } : item))
-    if (cat !== '消耗品') {
+    if (!isConsumable(cat)) {
       setLinkedProduct(prev => { const n = { ...prev }; delete n[idx]; return n })
       if (pickerOpenIdx === idx) setPickerOpenIdx(null)
     }
@@ -123,8 +139,19 @@ export function ReceiptScanDialog({
         const item = items[i]
         const productId = linkedProduct[i]
 
-        if (item.category === '消耗品' && productId) {
-          // 已連結商品 → 直接建採購紀錄
+        // 全部存入 receipt_temp_items（供對帳用）
+        await supabase.from('receipt_temp_items').insert({
+          profile_id: profileId,
+          purchase_date: purchaseDate,
+          store: storeVal,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          category: item.category,
+        })
+
+        // 消耗品且已連結商品 → 同步建採購紀錄
+        if (isConsumable(item.category) && productId) {
           await supabase.from('consumable_purchases').insert({
             product_id: productId,
             profile_id: profileId,
@@ -134,17 +161,6 @@ export function ReceiptScanDialog({
             quantity: item.quantity,
             is_promotion: false,
             note: item.name,
-          })
-        } else {
-          // 其餘全部暫存（消耗品未連結、記帳）
-          await supabase.from('receipt_temp_items').insert({
-            profile_id: profileId,
-            purchase_date: purchaseDate,
-            store: storeVal,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            category: item.category,
           })
         }
       }
@@ -159,10 +175,12 @@ export function ReceiptScanDialog({
     !productSearch || p.name.includes(productSearch) || p.item_name.includes(productSearch)
   )
 
-  const consumableCount = items.filter(i => i.category === '消耗品').length
-  const accountCount = items.filter(i => i.category === '記帳').length
+  const foodTotal = items.filter(i => i.category === '食物' || i.category === '食物且消耗品')
+    .reduce((s, i) => s + i.price * i.quantity, 0)
+  const goodsTotal = items.filter(i => i.category === '用品' || i.category === '用品且消耗品')
+    .reduce((s, i) => s + i.price * i.quantity, 0)
   const linkedCount = Object.keys(linkedProduct).length
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
+  const consumableCount = items.filter(i => isConsumable(i.category)).length
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
@@ -179,39 +197,26 @@ export function ReceiptScanDialog({
             {error && (
               <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-600">{error}</div>
             )}
-            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1">
-              <p><span className="font-medium text-blue-600">消耗品</span>：加入消耗品管理（可連結商品建立採購紀錄），也會暫存供對帳</p>
-              <p><span className="font-medium text-green-600">記帳</span>：食材及其他消費，暫存供資產管家對帳</p>
-              <p className="text-gray-400">所有品項均會保存，確保金額可完整對帳</p>
+            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1.5">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <p><span className="font-medium text-green-600">食物</span>：食品飲料，計入飲食對帳</p>
+                <p><span className="font-medium text-teal-600">食物且消耗品</span>：同上 + 追蹤存量</p>
+                <p><span className="font-medium text-orange-500">用品</span>：一次性用品，計入購物對帳</p>
+                <p><span className="font-medium text-blue-600">用品且消耗品</span>：同上 + 追蹤存量</p>
+              </div>
+              <p className="text-gray-400 pt-1">所有品項均儲存，對帳 = 食（1+2）＋購（3+4）</p>
             </div>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-            />
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-green-300 text-green-600 justify-center hover:bg-green-50 transition-colors"
-            >
-              <Camera className="h-5 w-5" />
-              <span className="text-sm font-medium">拍攝收據</span>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+            <button onClick={() => cameraInputRef.current?.click()}
+              className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-green-300 text-green-600 justify-center hover:bg-green-50 transition-colors">
+              <Camera className="h-5 w-5" /><span className="text-sm font-medium">拍攝收據</span>
             </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-gray-200 text-gray-500 justify-center hover:bg-gray-50 transition-colors"
-            >
-              <ImagePlus className="h-5 w-5" />
-              <span className="text-sm font-medium">從相簿選取</span>
+            <button onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-gray-200 text-gray-500 justify-center hover:bg-gray-50 transition-colors">
+              <ImagePlus className="h-5 w-5" /><span className="text-sm font-medium">從相簿選取</span>
             </button>
           </div>
         )}
@@ -228,29 +233,25 @@ export function ReceiptScanDialog({
             <div className="px-5 pb-3 flex gap-3 shrink-0">
               <div className="flex-1">
                 <label className="text-xs text-gray-400 block mb-1">消費日期</label>
-                <input
-                  type="date"
-                  value={purchaseDate}
-                  onChange={e => setPurchaseDate(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
+                <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
               <div className="flex-1">
                 <label className="text-xs text-gray-400 block mb-1">通路</label>
-                <input
-                  type="text"
-                  value={store}
-                  onChange={e => setStore(e.target.value)}
-                  placeholder="例：全聯、好市多"
-                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                />
+                <input type="text" value={store} onChange={e => setStore(e.target.value)} placeholder="例：全聯、好市多"
+                  className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
             </div>
 
-            <div className="px-5 pb-2 flex gap-2 items-center shrink-0 text-xs">
-              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">消耗品 {consumableCount}（連結 {linkedCount}）</span>
-              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">記帳 {accountCount}</span>
-              <span className="ml-auto text-gray-400">合計 ${total.toFixed(0)}</span>
+            {/* Summary */}
+            <div className="px-5 pb-2 flex gap-3 shrink-0 text-xs">
+              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">食 ${foodTotal.toFixed(0)}</span>
+              <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-600">購 ${goodsTotal.toFixed(0)}</span>
+              {consumableCount > 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-600">
+                  消耗品 {consumableCount}（連結 {linkedCount}）
+                </span>
+              )}
             </div>
 
             {error && (
@@ -262,26 +263,28 @@ export function ReceiptScanDialog({
                 const linked = linkedProduct[idx]
                 const linkedProd = products.find(p => p.id === linked)
                 const isPickerOpen = pickerOpenIdx === idx
+                const consumable = isConsumable(item.category)
 
                 return (
                   <div key={idx} className="bg-gray-50 rounded-2xl border overflow-hidden">
-                    <div className="p-3 flex items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          ${item.price}
-                          {item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
-                        </p>
+                    <div className="p-3">
+                      <div className="flex items-start gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                          <p className={`text-xs mt-0.5 ${item.price < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                            ${item.price}
+                            {item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex gap-1.5 shrink-0">
-                        {(['消耗品', '記帳'] as ItemCategory[]).map(cat => (
+                      {/* 2x2 category grid */}
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {CATEGORIES.map(cat => (
                           <button
                             key={cat}
                             onClick={() => setCategory(idx, cat)}
-                            className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                              item.category === cat
-                                ? cat === '消耗品' ? 'bg-blue-500 text-white border-blue-500' : 'bg-green-500 text-white border-green-500'
-                                : 'border-gray-200 text-gray-400'
+                            className={`py-1.5 text-xs rounded-lg border transition-colors ${
+                              item.category === cat ? CATEGORY_STYLES[cat] : 'border-gray-200 text-gray-400 bg-white'
                             }`}
                           >
                             {cat}
@@ -290,7 +293,7 @@ export function ReceiptScanDialog({
                       </div>
                     </div>
 
-                    {item.category === '消耗品' && (
+                    {consumable && (
                       <div className="border-t px-3 pb-2">
                         {linked && linkedProd ? (
                           <div className="flex items-center gap-2 pt-2">
@@ -306,29 +309,21 @@ export function ReceiptScanDialog({
                             className="mt-2 flex items-center gap-1 text-xs text-blue-500"
                           >
                             {isPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isPickerOpen ? '收起' : '連結商品（直接建立採購紀錄）'}
+                            {isPickerOpen ? '收起' : '連結商品（同步建立採購紀錄）'}
                           </button>
                         )}
 
                         {isPickerOpen && (
                           <div className="mt-2 space-y-2">
-                            <input
-                              type="text"
-                              placeholder="搜尋商品名稱…"
-                              value={productSearch}
-                              onChange={e => setProductSearch(e.target.value)}
-                              className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                              autoFocus
-                            />
+                            <input type="text" placeholder="搜尋商品名稱…" value={productSearch}
+                              onChange={e => setProductSearch(e.target.value)} autoFocus
+                              className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                             <div className="max-h-36 overflow-y-auto space-y-1">
                               {filteredProducts.length === 0 ? (
-                                <p className="text-xs text-gray-400 py-2 text-center">無符合商品；不連結會暫存待處理</p>
+                                <p className="text-xs text-gray-400 py-2 text-center">無符合商品；不連結仍會暫存待處理</p>
                               ) : filteredProducts.map(p => (
-                                <button
-                                  key={p.id}
-                                  onClick={() => linkProduct(idx, p.id)}
-                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors"
-                                >
+                                <button key={p.id} onClick={() => linkProduct(idx, p.id)}
+                                  className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors">
                                   <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
                                   <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
                                 </button>
@@ -346,10 +341,7 @@ export function ReceiptScanDialog({
             <div className="px-5 pb-5 pt-2 shrink-0 border-t">
               <div className="flex gap-3">
                 <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm text-gray-500">取消</button>
-                <button
-                  onClick={handleSave}
-                  className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-medium"
-                >
+                <button onClick={handleSave} className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-medium">
                   儲存全部（{items.length} 筆）
                 </button>
               </div>

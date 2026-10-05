@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const { imageBase64, mimeType } = await req.json()
   if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 })
 
-  const prompt = `你是一個收據辨識工具。請仔細閱讀這張收據圖片，列出所有購買品項（包含折扣券/COUPON行，以負數價格表示）。
+  const prompt = `你是一個收據辨識工具。請仔細閱讀這張收據圖片，列出所有購買品項（包含COUPON/折扣行，金額填負數）。
 
 請回傳 JSON 格式：
 {
@@ -17,16 +17,18 @@ export async function POST(req: NextRequest) {
   "items": [
     {
       "name": "品項名稱",
-      "price": 總金額（數字，台幣；折扣/COUPON填負數；若有折扣請填折扣後實際支出金額）,
+      "price": 金額（數字，台幣；COUPON/折扣填負數）,
       "quantity": 數量（整數，預設1）,
-      "category": "消耗品或記帳"
+      "category": "食物或食物且消耗品或用品或用品且消耗品"
     }
   ]
 }
 
-分類規則：
-- 消耗品：清潔用品、個人護理、保養品、藥品、衛生用品、廚房耗材等非食物消耗性用品
-- 記帳：食品、飲料、生鮮、服飾、電器、袋費、折扣券、服務費等其他所有項目
+分類規則（四選一，必須完全一致）：
+- 食物：食品、飲料、生鮮、零食、即食品等食物類
+- 食物且消耗品：需定期補充的食品，如橄欖油、蛋白粉、保健飲品、寵物飼料等
+- 用品：衣物、電器、袋費、服務費、COUPON折扣等非消耗性品項
+- 用品且消耗品：清潔劑、洗碗精、衛生紙、洗髮精、護膚品、藥品等定期補充的日用品
 
 只回傳 JSON，不要其他文字或 markdown 格式。`
 
