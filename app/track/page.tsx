@@ -20,7 +20,7 @@ type Tab = typeof TABS[number]
 
 const PRESET_CATEGORIES = ['家事', '耗材', '保養', '開封', '旅遊', '健康', '其他']
 const CONSUMABLE_CATEGORIES: ConsumableCategory[] = ['食品飲料', '保養藥品', '個人護理', '餐廚清潔', '其他']
-const CONSUMABLE_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶']
+const CONSUMABLE_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶', '罐', '條', '盒', '組', '支', '雙', '件', '份', '次']
 
 type ScheduleMode = 'none' | 'interval' | 'weekly' | 'monthly_date' | 'monthly_weekday' | 'yearly'
 
@@ -323,15 +323,12 @@ function ItemDialog({
 
         <div>
           <label className="text-xs text-gray-500 mb-1 block">單位（每單位單價計算用）</label>
-          <div className="flex flex-wrap gap-2">
-            {CONSUMABLE_UNITS.map(u => (
-              <button
-                key={u}
-                onClick={() => setUnit(u)}
-                className={`px-3 py-1 rounded-full text-xs border transition-colors ${unit === u ? 'bg-green-500 text-white border-green-500' : 'border-gray-200 text-gray-500'}`}
-              >{u}</button>
-            ))}
-          </div>
+          <input list="unit-list" value={unit} onChange={e => setUnit(e.target.value)}
+            placeholder="選擇或輸入單位"
+            className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+          <datalist id="unit-list">
+            {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
+          </datalist>
         </div>
 
         <div className="flex gap-3 pt-1">
@@ -356,6 +353,12 @@ export default function TrackPage() {
 
   const [pageState, setPageState] = useState<'loading' | 'ready' | 'no-auth'>('loading')
   const [tab, setTab] = useState<Tab>('習慣')
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('tab') as Tab | null
+    if (t && (TABS as readonly string[]).includes(t)) setTab(t)
+  }, [])
 
   useEffect(() => {
     async function loadProfiles() {

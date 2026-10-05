@@ -304,7 +304,7 @@ export default function ItemDetailPage() {
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
-            <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-600">
+            <button onClick={() => router.push('/track?tab=消耗品')} className="text-gray-400 hover:text-gray-600">
               <ChevronLeft className="h-5 w-5" />
             </button>
             <div className="flex-1">
