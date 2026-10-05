@@ -12,6 +12,7 @@ import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'da
 import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2, ChevronRight, Package, ScanLine } from 'lucide-react'
 import { computeScheduleStatus, scheduleLabel } from '@/lib/schedule'
 import { ReceiptScanDialog } from '@/components/track/ReceiptScanDialog'
+import { TempReceiptPanel } from '@/components/track/TempReceiptPanel'
 import type { Habit, HabitLog, TrackerItem, TrackerLog, Profile, ScheduleType, ScheduleConfig, ConsumableItem, ConsumableCategory } from '@/types'
 
 const TABS = ['習慣', '頻率事項', '消耗品'] as const
@@ -1099,6 +1100,8 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
   const [showAddItem, setShowAddItem] = useState(false)
   const [editingItem, setEditingItem] = useState<ConsumableItem | null>(null)
   const [showScan, setShowScan] = useState(false)
+  const [showTempPanel, setShowTempPanel] = useState(false)
+  const [tempCount, setTempCount] = useState(0)
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -1118,6 +1121,13 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
       for (const p of prods || []) counts[p.item_id] = (counts[p.item_id] || 0) + 1
       setProductCounts(counts)
     }
+
+    const { count } = await supabase
+      .from('receipt_temp_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('profile_id', profile.id)
+      .eq('is_processed', false)
+    setTempCount(count ?? 0)
   }, [profile.id])
 
   useEffect(() => { load() }, [load])
@@ -1137,6 +1147,15 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
           ))}
         </div>
         <div className="ml-3 shrink-0 flex items-center gap-2">
+          {tempCount > 0 && (
+            <button
+              onClick={() => setShowTempPanel(true)}
+              className="flex items-center gap-1 text-xs text-orange-500 font-medium"
+            >
+              待處理
+              <span className="bg-orange-500 text-white rounded-full px-1.5 py-0.5 text-xs leading-none">{tempCount}</span>
+            </button>
+          )}
           <button
             onClick={() => setShowScan(true)}
             className="flex items-center gap-1 text-xs text-blue-500 font-medium"
@@ -1200,6 +1219,12 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
           profileId={profile.id}
           onClose={() => setShowScan(false)}
           onSaved={() => { setShowScan(false); load() }}
+        />
+      )}
+      {showTempPanel && (
+        <TempReceiptPanel
+          profileId={profile.id}
+          onClose={() => { setShowTempPanel(false); load() }}
         />
       )}
     </div>

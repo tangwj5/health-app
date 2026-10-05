@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { X, Camera, ImagePlus, Loader2, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import type { ConsumableProduct } from '@/types'
 
-type ItemCategory = '食材' | '消耗品' | '其他'
+type ItemCategory = '消耗品' | '記帳'
 
 interface ParsedItem {
   name: string
@@ -19,10 +19,8 @@ interface ProductOption extends ConsumableProduct {
   item_name: string
 }
 
-const CATEGORY_COLORS: Record<ItemCategory, string> = {
-  食材: 'bg-green-500 text-white border-green-500',
-  消耗品: 'bg-blue-500 text-white border-blue-500',
-  其他: 'bg-gray-400 text-white border-gray-400',
+function geminiCategoryToLocal(cat: string): ItemCategory {
+  return cat === '消耗品' ? '消耗品' : '記帳'
 }
 
 export function ReceiptScanDialog({
@@ -36,6 +34,7 @@ export function ReceiptScanDialog({
 }) {
   const supabase = createClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const [step, setStep] = useState<'pick' | 'scanning' | 'review' | 'saving'>('pick')
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +85,10 @@ export function ReceiptScanDialog({
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || '掃描失敗')
       if (!Array.isArray(data.items) || data.items.length === 0) throw new Error('未能識別任何品項')
-      setItems(data.items)
+      setItems(data.items.map((it: any) => ({
+        ...it,
+        category: geminiCategoryToLocal(it.category ?? '記帳'),
+      })))
       if (data.store) setStore(data.store)
       setStep('review')
     } catch (e: any) {
@@ -116,12 +118,13 @@ export function ReceiptScanDialog({
   async function handleSave() {
     setStep('saving')
     try {
+      const storeVal = store.trim() || '未知通路'
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
         const productId = linkedProduct[i]
-        const storeVal = store.trim() || '未知通路'
 
         if (item.category === '消耗品' && productId) {
+          // 已連結商品 → 直接建採購紀錄
           await supabase.from('consumable_purchases').insert({
             product_id: productId,
             profile_id: profileId,
@@ -133,6 +136,7 @@ export function ReceiptScanDialog({
             note: item.name,
           })
         } else {
+          // 其餘全部暫存（消耗品未連結、記帳）
           await supabase.from('receipt_temp_items').insert({
             profile_id: profileId,
             purchase_date: purchaseDate,
@@ -156,13 +160,13 @@ export function ReceiptScanDialog({
   )
 
   const consumableCount = items.filter(i => i.category === '消耗品').length
-  const foodCount = items.filter(i => i.category === '食材').length
+  const accountCount = items.filter(i => i.category === '記帳').length
   const linkedCount = Object.keys(linkedProduct).length
+  const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
       <div className="bg-white w-full max-w-lg mx-auto rounded-t-2xl flex flex-col max-h-[92vh]">
-        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
           <h3 className="text-sm font-semibold text-gray-800">
             {step === 'pick' ? '掃描收據' : step === 'scanning' ? '辨識中…' : step === 'saving' ? '儲存中…' : '確認明細'}
@@ -170,41 +174,40 @@ export function ReceiptScanDialog({
           <button onClick={onClose}><X className="h-4 w-4 text-gray-400" /></button>
         </div>
 
-        {/* Pick step */}
         {step === 'pick' && (
           <div className="px-5 pb-6 space-y-4">
             {error && (
               <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-xs text-red-600">{error}</div>
             )}
-            <p className="text-xs text-gray-500">拍攝或選擇收據照片，AI 將自動辨識品項並分類</p>
+            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-500 space-y-1">
+              <p><span className="font-medium text-blue-600">消耗品</span>：加入消耗品管理（可連結商品建立採購紀錄），也會暫存供對帳</p>
+              <p><span className="font-medium text-green-600">記帳</span>：食材及其他消費，暫存供資產管家對帳</p>
+              <p className="text-gray-400">所有品項均會保存，確保金額可完整對帳</p>
+            </div>
             <input
-              ref={fileInputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
             />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+            />
             <button
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute('capture')
-                  fileInputRef.current.setAttribute('capture', 'environment')
-                  fileInputRef.current.click()
-                }
-              }}
+              onClick={() => cameraInputRef.current?.click()}
               className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-green-300 text-green-600 justify-center hover:bg-green-50 transition-colors"
             >
               <Camera className="h-5 w-5" />
               <span className="text-sm font-medium">拍攝收據</span>
             </button>
             <button
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute('capture')
-                  fileInputRef.current.click()
-                }
-              }}
+              onClick={() => fileInputRef.current?.click()}
               className="w-full flex items-center gap-3 py-4 rounded-2xl border-2 border-dashed border-gray-200 text-gray-500 justify-center hover:bg-gray-50 transition-colors"
             >
               <ImagePlus className="h-5 w-5" />
@@ -213,26 +216,15 @@ export function ReceiptScanDialog({
           </div>
         )}
 
-        {/* Scanning step */}
-        {step === 'scanning' && (
+        {(step === 'scanning' || step === 'saving') && (
           <div className="px-5 pb-8 flex flex-col items-center gap-3 py-12">
             <Loader2 className="h-8 w-8 text-green-500 animate-spin" />
-            <p className="text-sm text-gray-500">正在辨識收據品項…</p>
+            <p className="text-sm text-gray-500">{step === 'scanning' ? '正在辨識收據品項…' : '儲存中…'}</p>
           </div>
         )}
 
-        {/* Saving step */}
-        {step === 'saving' && (
-          <div className="px-5 pb-8 flex flex-col items-center gap-3 py-12">
-            <Loader2 className="h-8 w-8 text-green-500 animate-spin" />
-            <p className="text-sm text-gray-500">儲存中…</p>
-          </div>
-        )}
-
-        {/* Review step */}
         {step === 'review' && (
           <>
-            {/* Date + store */}
             <div className="px-5 pb-3 flex gap-3 shrink-0">
               <div className="flex-1">
                 <label className="text-xs text-gray-400 block mb-1">消費日期</label>
@@ -255,17 +247,16 @@ export function ReceiptScanDialog({
               </div>
             </div>
 
-            {/* Summary chips */}
-            <div className="px-5 pb-2 flex gap-2 shrink-0 text-xs">
-              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">{foodCount} 食材</span>
-              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">{consumableCount} 消耗品（{linkedCount} 已連結）</span>
+            <div className="px-5 pb-2 flex gap-2 items-center shrink-0 text-xs">
+              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">消耗品 {consumableCount}（連結 {linkedCount}）</span>
+              <span className="px-2.5 py-1 rounded-full bg-green-100 text-green-700">記帳 {accountCount}</span>
+              <span className="ml-auto text-gray-400">合計 ${total.toFixed(0)}</span>
             </div>
 
             {error && (
               <div className="mx-5 mb-2 bg-red-50 border border-red-100 rounded-xl px-4 py-2 text-xs text-red-600 shrink-0">{error}</div>
             )}
 
-            {/* Items list */}
             <div className="overflow-y-auto flex-1 px-5 pb-3 space-y-2">
               {items.map((item, idx) => {
                 const linked = linkedProduct[idx]
@@ -275,7 +266,6 @@ export function ReceiptScanDialog({
                 return (
                   <div key={idx} className="bg-gray-50 rounded-2xl border overflow-hidden">
                     <div className="p-3 flex items-start gap-2">
-                      {/* Item info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
                         <p className="text-xs text-gray-400 mt-0.5">
@@ -283,15 +273,15 @@ export function ReceiptScanDialog({
                           {item.quantity > 1 && <span className="ml-1">× {item.quantity}</span>}
                         </p>
                       </div>
-
-                      {/* Category buttons */}
-                      <div className="flex gap-1 shrink-0">
-                        {(['食材', '消耗品', '其他'] as ItemCategory[]).map(cat => (
+                      <div className="flex gap-1.5 shrink-0">
+                        {(['消耗品', '記帳'] as ItemCategory[]).map(cat => (
                           <button
                             key={cat}
                             onClick={() => setCategory(idx, cat)}
-                            className={`px-2 py-1 rounded-full text-xs border transition-colors ${
-                              item.category === cat ? CATEGORY_COLORS[cat] : 'border-gray-200 text-gray-400'
+                            className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                              item.category === cat
+                                ? cat === '消耗品' ? 'bg-blue-500 text-white border-blue-500' : 'bg-green-500 text-white border-green-500'
+                                : 'border-gray-200 text-gray-400'
                             }`}
                           >
                             {cat}
@@ -300,16 +290,15 @@ export function ReceiptScanDialog({
                       </div>
                     </div>
 
-                    {/* Product linking for 消耗品 */}
                     {item.category === '消耗品' && (
                       <div className="border-t px-3 pb-2">
                         {linked && linkedProd ? (
                           <div className="flex items-center gap-2 pt-2">
-                            <Check className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                            <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                             <span className="text-xs text-gray-700 flex-1 truncate">
                               {linkedProd.item_name} · {linkedProd.name}
                             </span>
-                            <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消連結</button>
+                            <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
                           </div>
                         ) : (
                           <button
@@ -317,7 +306,7 @@ export function ReceiptScanDialog({
                             className="mt-2 flex items-center gap-1 text-xs text-blue-500"
                           >
                             {isPickerOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                            {isPickerOpen ? '收起' : '選擇商品（匯入採購紀錄）'}
+                            {isPickerOpen ? '收起' : '連結商品（直接建立採購紀錄）'}
                           </button>
                         )}
 
@@ -333,7 +322,7 @@ export function ReceiptScanDialog({
                             />
                             <div className="max-h-36 overflow-y-auto space-y-1">
                               {filteredProducts.length === 0 ? (
-                                <p className="text-xs text-gray-400 py-2 text-center">無符合商品，可先儲存後手動匯入</p>
+                                <p className="text-xs text-gray-400 py-2 text-center">無符合商品；不連結會暫存待處理</p>
                               ) : filteredProducts.map(p => (
                                 <button
                                   key={p.id}
@@ -354,18 +343,14 @@ export function ReceiptScanDialog({
               })}
             </div>
 
-            {/* Footer */}
             <div className="px-5 pb-5 pt-2 shrink-0 border-t">
-              <p className="text-xs text-gray-400 mb-3">
-                已連結商品 → 直接建立採購紀錄；未連結消耗品 / 食材 / 其他 → 暫存備查
-              </p>
               <div className="flex gap-3">
                 <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm text-gray-500">取消</button>
                 <button
                   onClick={handleSave}
                   className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-medium"
                 >
-                  確認儲存（{items.length} 筆）
+                  儲存全部（{items.length} 筆）
                 </button>
               </div>
             </div>
