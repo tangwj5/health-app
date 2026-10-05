@@ -247,6 +247,7 @@ export function ReceiptScanDialog({
           price: netPrice,
           quantity: item.quantity,
           category: item.category,
+          linked_product_id: productId ?? null,
         })
 
         if (isConsumable(item.category) && productId) {

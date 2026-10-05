@@ -67,7 +67,7 @@ export function TempReceiptPanel({
   const displayed = (() => {
     if (filter === '食') return items.filter(i => (FOOD_CATS as readonly string[]).includes(i.category))
     if (filter === '購') return items.filter(i => (GOODS_CATS as readonly string[]).includes(i.category))
-    if (filter === '消耗品待匯入') return items.filter(i => (CONSUMABLE_CATS as readonly string[]).includes(i.category))
+    if (filter === '消耗品待匯入') return items.filter(i => (CONSUMABLE_CATS as readonly string[]).includes(i.category) && !i.linked_product_id)
     return items
   })()
 
@@ -80,7 +80,7 @@ export function TempReceiptPanel({
     else groups.push({ key, date: item.purchase_date, store: item.store ?? '未知通路', items: [item] })
   }
 
-  const consumableUnlinked = items.filter(i => (CONSUMABLE_CATS as readonly string[]).includes(i.category)).length
+  const consumableUnlinked = items.filter(i => (CONSUMABLE_CATS as readonly string[]).includes(i.category) && !i.linked_product_id).length
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
