@@ -18,7 +18,7 @@ const CATEGORY_STYLES: Record<ItemCategory, string> = {
 }
 
 const CONSUMABLE_CATEGORIES: ConsumableCategory[] = ['食品飲料', '保養藥品', '個人護理', '餐廚清潔', '其他']
-const CONSUMABLE_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶']
+const CONSUMABLE_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶', '罐', '條', '盒', '組', '支', '雙', '件', '份', '次']
 
 function defaultConsumableCategory(itemCat: ItemCategory): ConsumableCategory {
   return (itemCat === '食物且消耗品') ? '食品飲料' : '餐廚清潔'
@@ -511,11 +511,13 @@ export function ReceiptScanDialog({
                               </div>
                               <div className="flex-1">
                                 <label className="text-xs text-gray-400 block mb-0.5">單位</label>
-                                <select value={qc.unit}
+                                <input list="scan-unit-list" value={qc.unit}
                                   onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], unit: e.target.value } }))}
-                                  className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
-                                  {CONSUMABLE_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                                </select>
+                                  placeholder="輸入單位"
+                                  className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                                <datalist id="scan-unit-list">
+                                  {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
+                                </datalist>
                               </div>
                             </div>
                             <div className="flex gap-2">
