@@ -96,6 +96,12 @@ export function TempReceiptPanel({
     setDeleteConfirm(null)
   }
 
+  async function skipConsumable(item: ReceiptTempItem) {
+    const downgraded = item.category === '食物且消耗品' ? '食物' : '用品'
+    await supabase.from('receipt_temp_items').update({ category: downgraded }).eq('id', item.id)
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, category: downgraded as any } : i))
+  }
+
   async function linkToProduct(productId: string) {
     if (!linkingItem) return
     setLinking(true)
@@ -244,7 +250,11 @@ export function TempReceiptPanel({
                               {isLinking ? <ChevronUp className="h-4 w-4" /> : <Link className="h-4 w-4" />}
                             </button>
                           )}
-                          {deleteConfirm === item.id ? (
+                          {filter === '消耗品待匯入' && isUnlinkedConsumable ? (
+                            <button onClick={() => skipConsumable(item)}
+                              className="shrink-0 text-xs text-gray-400 hover:text-orange-400 px-2 py-0.5 rounded border border-gray-200 transition-colors"
+                              title="不追蹤消耗品，保留對帳">略過</button>
+                          ) : deleteConfirm === item.id ? (
                             <div className="flex gap-1 shrink-0">
                               <button onClick={() => deleteItem(item.id)} className="text-xs text-red-500 px-1.5 py-0.5 rounded border border-red-200">刪</button>
                               <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-400 px-1.5 py-0.5 rounded border border-gray-200">取消</button>
