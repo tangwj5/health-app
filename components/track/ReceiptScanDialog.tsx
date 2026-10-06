@@ -105,12 +105,27 @@ export function ReceiptScanDialog({
     }
   }
 
-  function fileToBase64(file: File): Promise<string> {
+  function fileToJpegBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve((reader.result as string).split(',')[1])
-      reader.onerror = reject
-      reader.readAsDataURL(file)
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        const MAX = 1600
+        let w = img.naturalWidth
+        let h = img.naturalHeight
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+          else { w = Math.round(w * MAX / h); h = MAX }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+        URL.revokeObjectURL(url)
+        resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('無法讀取圖片，請改用 JPEG 或 PNG 格式')) }
+      img.src = url
     })
   }
 
@@ -118,11 +133,11 @@ export function ReceiptScanDialog({
     setError(null)
     setStep('scanning')
     try {
-      const base64 = await fileToBase64(file)
+      const base64 = await fileToJpegBase64(file)
       const res = await fetch('/api/scan-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
+        body: JSON.stringify({ imageBase64: base64, mimeType: 'image/jpeg' }),
       })
       const data = await res.json()
       if (!res.ok || data.error) throw new Error(data.error || '掃描失敗')
