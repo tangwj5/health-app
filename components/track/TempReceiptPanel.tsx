@@ -37,6 +37,7 @@ interface QuickCreate {
   productName: string
   category: ConsumableCategory
   unit: string
+  purchaseQty: number
   saving: boolean
 }
 
@@ -151,6 +152,7 @@ export function TempReceiptPanel({
         .select().single()
       if (!prodData) throw new Error()
       setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: quickCreate.itemName.trim(), item_unit: quickCreate.unit }, ...prev])
+      setLinkQty(quickCreate.purchaseQty)
       await linkToProduct(prodData.id)
     } catch {
       setQuickCreate(prev => prev ? { ...prev, saving: false } : null)
@@ -332,6 +334,7 @@ export function TempReceiptPanel({
                                     productName: item.name,
                                     category: defaultConsumableCategory(item.category),
                                     unit: 'ml',
+                                    purchaseQty: linkQty,
                                     saving: false,
                                   })}
                                   className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-blue-500 text-xs hover:bg-blue-50 transition-colors"
@@ -373,6 +376,18 @@ export function TempReceiptPanel({
                                       {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
                                     </datalist>
                                   </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-400 shrink-0">購入數量</label>
+                                  <input type="number" min="0.01" step="any" value={quickCreate.purchaseQty}
+                                    onChange={e => setQuickCreate(prev => prev ? { ...prev, purchaseQty: parseFloat(e.target.value) || 1 } : null)}
+                                    className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                                  <span className="text-xs text-gray-500">{quickCreate.unit || '單位'}</span>
+                                  {quickCreate.unit && quickCreate.purchaseQty > 0 && (
+                                    <span className="text-xs text-blue-600 ml-auto">
+                                      ${(item.price / quickCreate.purchaseQty).toFixed(2)}/{quickCreate.unit}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex gap-2">
                                   <button onClick={saveQuickCreate} disabled={quickCreate.saving || !quickCreate.itemName.trim()}

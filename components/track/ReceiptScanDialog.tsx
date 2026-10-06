@@ -52,6 +52,7 @@ interface QuickCreateState {
   productName: string
   category: ConsumableCategory
   unit: string
+  purchaseQty: number
   saving: boolean
 }
 
@@ -214,6 +215,7 @@ export function ReceiptScanDialog({
         productName: suggestedName,
         category: defaultConsumableCategory(items[idx].category),
         unit: 'ml',
+        purchaseQty: items[idx].quantity,
         saving: false,
       },
     }))
@@ -236,7 +238,7 @@ export function ReceiptScanDialog({
       if (!prodData) throw new Error()
       setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: qc.itemName.trim(), item_unit: qc.unit }, ...prev])
       setLinkedProduct(prev => ({ ...prev, [idx]: prodData.id }))
-      setLinkedQuantity(prev => ({ ...prev, [idx]: items[idx].quantity }))
+      setLinkedQuantity(prev => ({ ...prev, [idx]: qc.purchaseQty }))
       setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
       setPickerOpenIdx(null)
     } catch {
@@ -555,6 +557,18 @@ export function ReceiptScanDialog({
                                   {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
                                 </datalist>
                               </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-gray-400 shrink-0">購入數量</label>
+                              <input type="number" min="0.01" step="any" value={qc.purchaseQty}
+                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], purchaseQty: parseFloat(e.target.value) || 1 } }))}
+                                className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                              <span className="text-xs text-gray-500">{qc.unit || '單位'}</span>
+                              {qc.unit && qc.purchaseQty > 0 && (
+                                <span className="text-xs text-blue-600 ml-auto">
+                                  ${(effectivePrice(idx) / qc.purchaseQty).toFixed(2)}/{qc.unit}
+                                </span>
+                              )}
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => saveQuickCreate(idx)} disabled={qc.saving || !qc.itemName.trim()}
