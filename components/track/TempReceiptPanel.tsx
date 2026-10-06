@@ -90,6 +90,12 @@ export function TempReceiptPanel({
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
+  async function markGroupProcessed(groupItems: ReceiptTempItem[]) {
+    const ids = groupItems.map(i => i.id)
+    await supabase.from('receipt_temp_items').update({ is_processed: true }).in('id', ids)
+    setItems(prev => prev.filter(i => !ids.includes(i.id)))
+  }
+
   async function deleteItem(id: string) {
     await supabase.from('receipt_temp_items').delete().eq('id', id)
     setItems(prev => prev.filter(i => i.id !== id))
@@ -214,14 +220,29 @@ export function TempReceiptPanel({
               {items.length === 0 ? '沒有待處理明細' : '此分類無項目'}
             </div>
           ) : groups.map(group => {
+            const groupFood  = group.items.filter(i => FOOD_CATS.includes(i.category)).reduce((s, i) => s + i.price * i.quantity, 0)
+            const groupGoods = group.items.filter(i => GOODS_CATS.includes(i.category)).reduce((s, i) => s + i.price * i.quantity, 0)
             const groupTotal = group.items.reduce((s, i) => s + i.price * i.quantity, 0)
             return (
               <div key={group.key}>
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="text-xs font-semibold text-gray-500">
-                    {format(parseISO(group.date), 'M/d')} · {group.store}
-                  </p>
-                  <span className="text-xs text-gray-300">${groupTotal.toFixed(0)}</span>
+                <div className="flex items-start gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-600">
+                      {format(parseISO(group.date), 'M/d')} · {group.store}
+                    </p>
+                    <div className="flex gap-2 mt-0.5 text-xs flex-wrap">
+                      {groupFood !== 0 && <span className="text-green-600">食 ${groupFood.toFixed(0)}</span>}
+                      {groupGoods !== 0 && <span className="text-orange-500">購 ${groupGoods.toFixed(0)}</span>}
+                      <span className="text-gray-400">合計 ${groupTotal.toFixed(0)}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => markGroupProcessed(group.items)}
+                    title="整張收據標記已對帳"
+                    className="shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 border border-gray-200 hover:border-green-400 px-2 py-0.5 rounded-full transition-colors mt-0.5"
+                  >
+                    <Check className="h-3 w-3" />全✓
+                  </button>
                 </div>
                 <div className="space-y-1.5">
                   {group.items.map(item => {
