@@ -29,6 +29,7 @@ function defaultConsumableCategory(itemCat: string): ConsumableCategory {
 
 interface ProductOption extends ConsumableProduct {
   item_name: string
+  item_unit: string
 }
 
 interface QuickCreate {
@@ -55,6 +56,7 @@ export function TempReceiptPanel({
   // Linking state
   const [products, setProducts] = useState<ProductOption[]>([])
   const [linkingItem, setLinkingItem] = useState<ReceiptTempItem | null>(null)
+  const [linkQty, setLinkQty] = useState<number>(1)
   const [productSearch, setProductSearch] = useState('')
   const [quickCreate, setQuickCreate] = useState<QuickCreate | null>(null)
   const [linking, setLinking] = useState(false)
@@ -79,7 +81,7 @@ export function TempReceiptPanel({
       .eq('profile_id', profileId)
       .order('created_at', { ascending: false })
     if (data) {
-      setProducts((data as any[]).map(p => ({ ...p, item_name: p.consumable_items?.name ?? '' })))
+      setProducts((data as any[]).map(p => ({ ...p, item_name: p.consumable_items?.name ?? '', item_unit: p.consumable_items?.unit ?? '' })))
     }
   }, [profileId])
 
@@ -122,7 +124,7 @@ export function TempReceiptPanel({
         purchase_date: linkingItem.purchase_date,
         store: linkingItem.store ?? '未知通路',
         price: linkingItem.price,
-        quantity: linkingItem.quantity,
+        quantity: linkQty,
         is_promotion: false,
         note: linkingItem.name,
       })
@@ -148,7 +150,7 @@ export function TempReceiptPanel({
         .insert({ item_id: itemData.id, profile_id: profileId, name: quickCreate.productName.trim() || quickCreate.itemName.trim() })
         .select().single()
       if (!prodData) throw new Error()
-      setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: quickCreate.itemName.trim() }, ...prev])
+      setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: quickCreate.itemName.trim(), item_unit: quickCreate.unit }, ...prev])
       await linkToProduct(prodData.id)
     } catch {
       setQuickCreate(prev => prev ? { ...prev, saving: false } : null)
@@ -263,7 +265,7 @@ export function TempReceiptPanel({
                             <button
                               onClick={() => {
                                 if (isLinking) { setLinkingItem(null); setQuickCreate(null) }
-                                else { setLinkingItem(item); setProductSearch(''); setQuickCreate(null) }
+                                else { setLinkingItem(item); setLinkQty(item.quantity); setProductSearch(''); setQuickCreate(null) }
                               }}
                               className="shrink-0 text-blue-400 hover:text-blue-600 p-0.5 transition-colors"
                               title="連結消耗品"
@@ -297,6 +299,13 @@ export function TempReceiptPanel({
                           <div className="bg-white border-t px-3 pb-3 pt-2 space-y-2">
                             {!quickCreate ? (
                               <>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-xs text-gray-400 shrink-0">購入數量</label>
+                                  <input type="number" min="0.01" step="any" value={linkQty}
+                                    onChange={e => setLinkQty(parseFloat(e.target.value) || 1)}
+                                    className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                                  <span className="text-xs text-gray-400">（連結商品後顯示單位）</span>
+                                </div>
                                 <input type="text" placeholder="搜尋現有商品…" value={productSearch} autoFocus
                                   onChange={e => setProductSearch(e.target.value)}
                                   className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
@@ -304,9 +313,16 @@ export function TempReceiptPanel({
                                   {filteredProducts.map(p => (
                                     <button key={p.id} disabled={linking}
                                       onClick={() => linkToProduct(p.id)}
-                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-40">
-                                      <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
-                                      <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-40 flex items-center justify-between">
+                                      <span>
+                                        <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
+                                        <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                      </span>
+                                      {p.item_unit && linkQty > 0 && (
+                                        <span className="text-xs text-blue-500 shrink-0">
+                                          ${(item.price / linkQty).toFixed(2)}/{p.item_unit}
+                                        </span>
+                                      )}
                                     </button>
                                   ))}
                                 </div>

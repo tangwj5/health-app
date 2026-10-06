@@ -44,6 +44,7 @@ interface ParsedItem {
 
 interface ProductOption extends ConsumableProduct {
   item_name: string
+  item_unit: string
 }
 
 interface QuickCreateState {
@@ -75,6 +76,7 @@ export function ReceiptScanDialog({
   const [purchaseDate, setPurchaseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [products, setProducts] = useState<ProductOption[]>([])
   const [linkedProduct, setLinkedProduct] = useState<Record<number, string>>({})
+  const [linkedQuantity, setLinkedQuantity] = useState<Record<number, number>>({})
   const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null)
   const [productSearch, setProductSearch] = useState('')
   const [quickCreate, setQuickCreate] = useState<Record<number, QuickCreateState>>({})
@@ -101,6 +103,7 @@ export function ReceiptScanDialog({
       setProducts((data as any[]).map(p => ({
         ...p,
         item_name: p.consumable_items?.name ?? '',
+        item_unit: p.consumable_items?.unit ?? '',
       })))
     }
   }
@@ -186,6 +189,7 @@ export function ReceiptScanDialog({
 
   function linkProduct(idx: number, productId: string) {
     setLinkedProduct(prev => ({ ...prev, [idx]: productId }))
+    setLinkedQuantity(prev => ({ ...prev, [idx]: items[idx].quantity }))
     setPickerOpenIdx(null)
     setProductSearch('')
     setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
@@ -193,6 +197,7 @@ export function ReceiptScanDialog({
 
   function unlinkProduct(idx: number) {
     setLinkedProduct(prev => { const n = { ...prev }; delete n[idx]; return n })
+    setLinkedQuantity(prev => { const n = { ...prev }; delete n[idx]; return n })
   }
 
   function openPicker(idx: number) {
@@ -229,8 +234,9 @@ export function ReceiptScanDialog({
         .insert({ item_id: itemData.id, profile_id: profileId, name: qc.productName.trim() || qc.itemName.trim() })
         .select().single()
       if (!prodData) throw new Error()
-      setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: qc.itemName.trim() }, ...prev])
+      setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: qc.itemName.trim(), item_unit: qc.unit }, ...prev])
       setLinkedProduct(prev => ({ ...prev, [idx]: prodData.id }))
+      setLinkedQuantity(prev => ({ ...prev, [idx]: items[idx].quantity }))
       setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
       setPickerOpenIdx(null)
     } catch {
@@ -266,14 +272,15 @@ export function ReceiptScanDialog({
         })
 
         if (isConsumable(item.category) && productId) {
+          const purchaseQty = linkedQuantity[i] ?? item.quantity
           await supabase.from('consumable_purchases').insert({
             product_id: productId,
             profile_id: profileId,
             purchase_date: purchaseDate,
             store: storeVal,
             price: netPrice,
-            quantity: item.quantity,
-            is_promotion: netPrice < item.price, // original price was higher → promotion
+            quantity: purchaseQty,
+            is_promotion: netPrice < item.price,
             note: item.name,
           })
         }
@@ -488,15 +495,29 @@ export function ReceiptScanDialog({
                     {consumable && (
                       <div className="border-t px-3 pb-3">
                         {linked && linkedProd ? (
-                          <div className="flex items-center gap-2 pt-2">
-                            <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                            <span className="text-xs text-gray-700 flex-1 truncate">
-                              {linkedProd.item_name} · {linkedProd.name}
-                            </span>
-                            {myDiscounts.length > 0 && (
-                              <span className="text-xs text-green-600 shrink-0">採購單價 ${netPrice}</span>
-                            )}
-                            <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
+                          <div className="pt-2 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                              <span className="text-xs text-gray-700 flex-1 truncate">
+                                {linkedProd.item_name} · {linkedProd.name}
+                              </span>
+                              <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
+                            </div>
+                            <div className="flex items-center gap-2 pl-5">
+                              <label className="text-xs text-gray-400 shrink-0">購入數量</label>
+                              <input
+                                type="number" min="0.01" step="any"
+                                value={linkedQuantity[idx] ?? item.quantity}
+                                onChange={e => setLinkedQuantity(prev => ({ ...prev, [idx]: parseFloat(e.target.value) || 1 }))}
+                                className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              />
+                              <span className="text-xs text-gray-500">{linkedProd.item_unit}</span>
+                              {(linkedQuantity[idx] ?? item.quantity) > 0 && (
+                                <span className="text-xs text-blue-600 ml-auto">
+                                  ${(netPrice / (linkedQuantity[idx] ?? item.quantity)).toFixed(2)}/{linkedProd.item_unit}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ) : qc ? (
                           <div className="mt-2 space-y-2">
