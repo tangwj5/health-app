@@ -5,15 +5,24 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store'
 import { BottomNav } from '@/components/layout/BottomNav'
-import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, X, Star } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, X, Star, Camera, Package } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO, addDays } from 'date-fns'
 import type { ConsumableItem, ConsumableProduct, ConsumablePurchase } from '@/types'
 
 const DEFAULT_STORES = ['好市多', '全聯', '7-11', '全家']
 
+interface PurchaseStat {
+  price: number
+  store: string
+  purchaseQty: number
+}
+
 interface ProductWithLatest extends ConsumableProduct {
   latestPurchase?: Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store'>
+  avgUnitPrice?: number
+  minPurchase?: PurchaseStat
+  purchaseCount: number
 }
 
 function ProductDialog({
@@ -37,7 +46,23 @@ function ProductDialog({
   const [capacity, setCapacity] = useState(initial?.capacity?.toString() ?? '')
   const [estimatedDays, setEstimatedDays] = useState(initial?.estimated_days?.toString() ?? '')
   const [note, setNote] = useState(initial?.note ?? '')
+  const [photoUrl, setPhotoUrl] = useState(initial?.photo_url ?? '')
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  async function handlePhotoUpload(file: File) {
+    setUploadingPhoto(true)
+    const ext = file.name.split('.').pop() || 'jpg'
+    const path = `${profileId}/${(Math.random().toString(36).slice(2))}.${ext}`
+    const { data, error } = await supabase.storage
+      .from('consumable-photos')
+      .upload(path, file, { upsert: true })
+    if (!error && data) {
+      const { data: { publicUrl } } = supabase.storage.from('consumable-photos').getPublicUrl(data.path)
+      setPhotoUrl(publicUrl)
+    }
+    setUploadingPhoto(false)
+  }
 
   async function save() {
     if (!name.trim()) return
@@ -48,6 +73,7 @@ function ProductDialog({
       capacity: capacity ? parseFloat(capacity) : null,
       estimated_days: estimatedDays ? parseInt(estimatedDays) : null,
       note: note.trim() || null,
+      photo_url: photoUrl || null,
     }
     if (initial) {
       await supabase.from('consumable_products').update(payload).eq('id', initial.id)
@@ -67,6 +93,31 @@ function ProductDialog({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="text-xs text-gray-500 mb-1 block">商品照片（選填）</label>
+            <div className="flex items-center gap-3">
+              {photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoUrl} alt="" className="w-16 h-16 rounded-xl object-cover border" />
+              ) : (
+                <div className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center shrink-0">
+                  <Package className="h-6 w-6 text-gray-300" />
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5">
+                <label className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs cursor-pointer ${uploadingPhoto ? 'opacity-50 pointer-events-none' : 'hover:bg-gray-50'}`}>
+                  <Camera className="h-3.5 w-3.5" />
+                  {uploadingPhoto ? '上傳中…' : '選擇照片'}
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handlePhotoUpload(f) }} />
+                </label>
+                {photoUrl && (
+                  <button onClick={() => setPhotoUrl('')} className="text-xs text-red-400 hover:text-red-600 text-left">移除照片</button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="col-span-2">
             <label className="text-xs text-gray-500 mb-1 block">商品名稱</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
@@ -256,19 +307,38 @@ export default function ItemDetailPage() {
     if (!prodData || prodData.length === 0) { setProducts([]); return }
 
     const { data: purchaseData } = await supabase
-      .from('consumable_purchases').select('product_id, purchase_date, price, store')
+      .from('consumable_purchases').select('product_id, purchase_date, price, quantity, store')
       .in('product_id', (prodData as ConsumableProduct[]).map(p => p.id))
       .order('purchase_date', { ascending: false })
 
     const latestByProduct: Record<string, Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store'>> = {}
+    const purchasesByProduct: Record<string, Array<{ price: number; quantity: number; store: string; purchase_date: string }>> = {}
+
     for (const pur of purchaseData || []) {
       if (!latestByProduct[pur.product_id]) latestByProduct[pur.product_id] = pur
+      if (!purchasesByProduct[pur.product_id]) purchasesByProduct[pur.product_id] = []
+      purchasesByProduct[pur.product_id].push(pur)
     }
 
-    setProducts((prodData as ConsumableProduct[]).map(p => ({
-      ...p,
-      latestPurchase: latestByProduct[p.id],
-    })))
+    setProducts((prodData as ConsumableProduct[]).map(p => {
+      const purs = purchasesByProduct[p.id] || []
+      const unitPriceEntries = purs
+        .filter(pur => pur.quantity > 0)
+        .map(pur => ({ unitPrice: pur.price / pur.quantity, price: pur.price, store: pur.store, purchaseQty: pur.quantity }))
+      const avgUnitPrice = unitPriceEntries.length
+        ? unitPriceEntries.reduce((sum, x) => sum + x.unitPrice, 0) / unitPriceEntries.length
+        : undefined
+      const minEntry = unitPriceEntries.length
+        ? unitPriceEntries.reduce((best, x) => x.unitPrice < best.unitPrice ? x : best)
+        : undefined
+      return {
+        ...p,
+        latestPurchase: latestByProduct[p.id],
+        avgUnitPrice,
+        minPurchase: minEntry ? { price: minEntry.price, store: minEntry.store, purchaseQty: minEntry.purchaseQty } : undefined,
+        purchaseCount: purs.length,
+      }
+    }))
   }, [profile?.id, itemId])
 
   useEffect(() => { if (profile) load() }, [load])
@@ -287,11 +357,9 @@ export default function ItemDetailPage() {
 
   const unit = item.unit
 
-  function unitPrice(p: ProductWithLatest) {
-    if (!p.latestPurchase) return null
-    const price = p.latestPurchase.price
-    if (p.capacity) return (price / p.capacity).toFixed(3)
-    return null
+  function latestUnitPrice(p: ProductWithLatest) {
+    if (!p.latestPurchase || !p.capacity) return null
+    return (p.latestPurchase.price / p.capacity).toFixed(2)
   }
 
   function nextBuyDate(p: ProductWithLatest) {
@@ -327,13 +395,24 @@ export default function ItemDetailPage() {
             <p className="text-sm">尚無商品，點右上角新增</p>
           </div>
         ) : products.map(prod => {
-          const up = unitPrice(prod)
+          const up = latestUnitPrice(prod)
           const nextDate = nextBuyDate(prod)
           const daysLeft = nextDate ? Math.ceil((nextDate.getTime() - Date.now()) / 86400000) : null
+          const minUnitPrice = prod.minPurchase && prod.minPurchase.purchaseQty > 0
+            ? prod.minPurchase.price / prod.minPurchase.purchaseQty
+            : null
 
           return (
             <div key={prod.id} className="bg-white rounded-2xl border">
               <Link href={`/track/${itemId}/${prod.id}`} className="flex items-start gap-3 p-4">
+                {prod.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={prod.photo_url} alt="" className="w-14 h-14 rounded-xl object-cover border shrink-0" />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-gray-50 border flex items-center justify-center shrink-0">
+                    <Package className="h-5 w-5 text-gray-300" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-gray-800">{prod.name}</p>
@@ -347,6 +426,18 @@ export default function ItemDetailPage() {
                         {up && <span className="ml-1 text-gray-400">（{up}/{unit}）</span>}
                         <span className="ml-1 text-gray-400">@ {prod.latestPurchase.store}</span>
                       </p>
+                      {prod.purchaseCount > 1 && (
+                        <div className="flex gap-3 text-xs text-gray-400">
+                          {prod.avgUnitPrice !== undefined && (
+                            <span>均 NT${prod.avgUnitPrice.toFixed(2)}/{unit}</span>
+                          )}
+                          {minUnitPrice !== null && prod.minPurchase && (
+                            <span className="text-green-600">
+                              最低 NT${minUnitPrice.toFixed(2)}/{unit} @ {prod.minPurchase.store}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {daysLeft != null && (
                         <p className={`text-xs font-medium ${daysLeft <= 7 ? 'text-red-500' : daysLeft <= 14 ? 'text-orange-500' : 'text-gray-400'}`}>
                           {daysLeft <= 0 ? '建議已到購買時機' : `約 ${daysLeft} 天後購買`}
