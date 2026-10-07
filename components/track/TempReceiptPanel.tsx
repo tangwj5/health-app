@@ -52,6 +52,7 @@ export function TempReceiptPanel({
   const [items, setItems] = useState<ReceiptTempItem[]>([])
   const [loading, setLoading] = useState(true)
   const [deleteConfirm, setDeleteConfirm] = useState<ReceiptTempItem | null>(null)
+  const [groupConfirm, setGroupConfirm] = useState<{ date: string; store: string; items: ReceiptTempItem[] } | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
 
   // Linking state
@@ -241,7 +242,7 @@ export function TempReceiptPanel({
                     </div>
                   </div>
                   <button
-                    onClick={() => markGroupProcessed(group.items)}
+                    onClick={() => setGroupConfirm({ date: group.date, store: group.store, items: group.items })}
                     title="整張收據標記已對帳"
                     className="shrink-0 flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 border border-gray-200 hover:border-green-400 px-2 py-0.5 rounded-full transition-colors mt-0.5"
                   >
@@ -406,6 +407,24 @@ export function TempReceiptPanel({
         </div>
       </div>
     </div>
+
+    {groupConfirm && (
+      <div className="fixed inset-0 bg-black/50 z-[60] flex items-end">
+        <div className="bg-white w-full max-w-lg mx-auto rounded-t-2xl p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800">確認整單對帳</h3>
+          <p className="text-sm text-gray-600">
+            確定將「<span className="font-medium text-gray-800">{groupConfirm.store}</span>」{groupConfirm.date.slice(5).replace('-', '/')} 共 {groupConfirm.items.length} 筆全部標記為已對帳？
+          </p>
+          <p className="text-xs text-gray-400">標記後將從待處理清單移除。</p>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setGroupConfirm(null)}
+              className="flex-1 py-3 rounded-xl border text-sm text-gray-500 font-medium">取消</button>
+            <button onClick={() => { markGroupProcessed(groupConfirm.items); setGroupConfirm(null) }}
+              className="flex-1 py-3 rounded-xl bg-green-500 text-white text-sm font-medium">確認對帳</button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {deleteConfirm && (
       <div className="fixed inset-0 bg-black/50 z-[60] flex items-end">
