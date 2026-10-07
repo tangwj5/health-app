@@ -48,17 +48,12 @@ interface ProductOption extends ConsumableProduct {
 }
 
 interface QuickCreateState {
-  mode: 'new-item' | 'add-to-item'
-  // new-item
-  itemName: string
-  category: ConsumableCategory
-  unit: string
-  // add-to-item
-  selectedItemId: string
+  itemSearch: string
+  selectedItemId: string        // '' = will create new item
   selectedItemName: string
   selectedItemUnit: string
-  itemSearch: string
-  // shared
+  newCategory: ConsumableCategory
+  newUnit: string
   productName: string
   purchaseQty: number
   saving: boolean
@@ -219,15 +214,13 @@ export function ReceiptScanDialog({
     setQuickCreate(prev => ({
       ...prev,
       [idx]: {
-        mode: 'new-item',
-        itemName: suggestedName,
-        productName: suggestedName,
-        category: defaultConsumableCategory(items[idx].category),
-        unit: 'ml',
+        itemSearch: suggestedName,
         selectedItemId: '',
         selectedItemName: '',
         selectedItemUnit: '',
-        itemSearch: '',
+        newCategory: defaultConsumableCategory(items[idx].category),
+        newUnit: 'ml',
+        productName: '',
         purchaseQty: items[idx].quantity,
         saving: false,
       },
@@ -237,31 +230,32 @@ export function ReceiptScanDialog({
   async function saveQuickCreate(idx: number) {
     const qc = quickCreate[idx]
     if (!qc) return
-    const isAddToItem = qc.mode === 'add-to-item'
-    if (isAddToItem && !qc.selectedItemId) return
-    if (!isAddToItem && !qc.itemName.trim()) return
+    const isNew = !qc.selectedItemId
+    if (isNew && !qc.itemSearch.trim()) return
+    if (!isNew && !qc.productName.trim()) return
     setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], saving: true } }))
     try {
       let itemId: string
       let itemName: string
       let itemUnit: string
-      if (isAddToItem) {
+      if (!isNew) {
         itemId = qc.selectedItemId
         itemName = qc.selectedItemName
         itemUnit = qc.selectedItemUnit
       } else {
         const { data: itemData } = await supabase
           .from('consumable_items')
-          .insert({ profile_id: profileId, name: qc.itemName.trim(), category: qc.category, unit: qc.unit })
+          .insert({ profile_id: profileId, name: qc.itemSearch.trim(), category: qc.newCategory, unit: qc.newUnit })
           .select().single()
         if (!itemData) throw new Error()
         itemId = itemData.id
-        itemName = qc.itemName.trim()
-        itemUnit = qc.unit
+        itemName = qc.itemSearch.trim()
+        itemUnit = qc.newUnit
       }
+      const prodName = qc.productName.trim() || itemName
       const { data: prodData } = await supabase
         .from('consumable_products')
-        .insert({ item_id: itemId, profile_id: profileId, name: qc.productName.trim() || itemName })
+        .insert({ item_id: itemId, profile_id: profileId, name: prodName })
         .select().single()
       if (!prodData) throw new Error()
       setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: itemName, item_unit: itemUnit }, ...prev])
@@ -551,101 +545,80 @@ export function ReceiptScanDialog({
                           </div>
                         ) : qc ? (
                           <div className="mt-2 space-y-2">
-                            {/* Mode toggle */}
-                            <div className="flex rounded-lg border overflow-hidden text-xs">
-                              {(['new-item', 'add-to-item'] as const).map(m => (
-                                <button key={m}
-                                  onClick={() => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], mode: m, selectedItemId: '', selectedItemName: '', selectedItemUnit: '', itemSearch: '' } }))}
-                                  className={`flex-1 py-1.5 transition-colors ${qc.mode === m ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
-                                  {m === 'new-item' ? '建立新品項' : '加到現有品項'}
-                                </button>
-                              ))}
-                            </div>
-
-                            {qc.mode === 'new-item' ? (<>
-                              <div>
-                                <label className="text-xs text-gray-400 block mb-0.5">品項名稱（大類）</label>
-                                <input type="text" value={qc.itemName} autoFocus
-                                  onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], itemName: e.target.value } }))}
-                                  placeholder="例：洗碗精、防曬乳"
-                                  className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                              </div>
-                              <div>
-                                <label className="text-xs text-gray-400 block mb-0.5">商品名稱（選填）</label>
-                                <input type="text" value={qc.productName}
-                                  onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], productName: e.target.value } }))}
-                                  placeholder="例：葡萄口味"
-                                  className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                              </div>
-                              <div className="flex gap-2">
-                                <div className="flex-1">
-                                  <label className="text-xs text-gray-400 block mb-0.5">類別</label>
-                                  <select value={qc.category}
-                                    onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], category: e.target.value as ConsumableCategory } }))}
-                                    className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
-                                    {CONSUMABLE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                  </select>
-                                </div>
-                                <div className="flex-1">
-                                  <label className="text-xs text-gray-400 block mb-0.5">單位</label>
-                                  <input list="scan-unit-list" value={qc.unit}
-                                    onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], unit: e.target.value } }))}
-                                    placeholder="輸入單位"
-                                    className="w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                                  <datalist id="scan-unit-list">
-                                    {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
-                                  </datalist>
-                                </div>
-                              </div>
-                            </>) : (<>
-                              {/* add-to-item mode */}
+                            {/* Step 1: 品項 */}
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-0.5">品項名稱</label>
                               {qc.selectedItemId ? (
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 border rounded-lg px-3 py-1.5 bg-blue-50">
                                   <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                  <span className="text-xs text-gray-700 flex-1">{qc.selectedItemName}</span>
+                                  <span className="text-xs text-gray-700 flex-1">{qc.selectedItemName} · {qc.selectedItemUnit}</span>
                                   <button onClick={() => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], selectedItemId: '', selectedItemName: '', selectedItemUnit: '' } }))}
                                     className="text-xs text-gray-400 underline shrink-0">換</button>
                                 </div>
                               ) : (
-                                <div>
-                                  <label className="text-xs text-gray-400 block mb-0.5">搜尋品項</label>
+                                <>
                                   <input type="text" autoFocus value={qc.itemSearch}
                                     onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], itemSearch: e.target.value } }))}
-                                    placeholder="輸入品項名稱…"
+                                    placeholder="搜尋現有品項，或輸入名稱新增"
                                     className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                                  <div className="mt-1 max-h-28 overflow-y-auto space-y-0.5">
-                                    {[...new Map(products.map(p => [p.item_id, { id: p.item_id, name: p.item_name, unit: p.item_unit }])).values()]
-                                      .filter(it => !qc.itemSearch || it.name.includes(qc.itemSearch))
-                                      .map(it => (
-                                        <button key={it.id}
-                                          onClick={() => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], selectedItemId: it.id, selectedItemName: it.name, selectedItemUnit: it.unit, itemSearch: '' } }))}
-                                          className="w-full text-left px-3 py-1.5 rounded-lg hover:bg-blue-50 text-xs text-gray-800">
-                                          {it.name} <span className="text-gray-400">· {it.unit}</span>
-                                        </button>
-                                      ))}
-                                  </div>
-                                </div>
+                                  {/* existing items matching search */}
+                                  {qc.itemSearch.length > 0 && (
+                                    <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5 border rounded-lg">
+                                      {[...new Map(products.map(p => [p.item_id, { id: p.item_id, name: p.item_name, unit: p.item_unit }])).values()]
+                                        .filter(it => it.name.includes(qc.itemSearch))
+                                        .map(it => (
+                                          <button key={it.id}
+                                            onClick={() => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], selectedItemId: it.id, selectedItemName: it.name, selectedItemUnit: it.unit } }))}
+                                            className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-xs text-gray-800 flex items-center gap-1">
+                                            <Check className="h-3 w-3 text-teal-400 shrink-0" />
+                                            {it.name} <span className="text-gray-400">· {it.unit}</span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  )}
+                                  {/* new item: show category+unit when no existing item selected */}
+                                  {qc.itemSearch.trim() && (
+                                    <div className="flex gap-2 mt-1.5">
+                                      <select value={qc.newCategory}
+                                        onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], newCategory: e.target.value as ConsumableCategory } }))}
+                                        className="flex-1 border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400">
+                                        {CONSUMABLE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                      </select>
+                                      <div className="flex-1">
+                                        <input list="scan-unit-list" value={qc.newUnit}
+                                          onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], newUnit: e.target.value } }))}
+                                          placeholder="單位"
+                                          className="w-full border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                                        <datalist id="scan-unit-list">
+                                          {CONSUMABLE_UNITS.map(u => <option key={u} value={u} />)}
+                                        </datalist>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
                               )}
-                              <div>
-                                <label className="text-xs text-gray-400 block mb-0.5">商品名稱</label>
-                                <input type="text" value={qc.productName}
-                                  onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], productName: e.target.value } }))}
-                                  placeholder="例：荔枝口味"
-                                  className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                              </div>
-                            </>)}
+                            </div>
 
-                            {/* Purchase qty — shared */}
+                            {/* Step 2: 商品名稱（always shown once item determined） */}
+                            <div>
+                              <label className="text-xs text-gray-400 block mb-0.5">商品名稱</label>
+                              <input type="text" value={qc.productName}
+                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], productName: e.target.value } }))}
+                                placeholder="例：荔枝口味、葡萄口味"
+                                className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                            </div>
+
+                            {/* Purchase qty */}
                             <div className="flex items-center gap-2">
                               <label className="text-xs text-gray-400 shrink-0">購入數量</label>
                               <input type="number" min="0.01" step="any" value={qc.purchaseQty}
                                 onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], purchaseQty: parseFloat(e.target.value) || 1 } }))}
                                 className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
                               <span className="text-xs text-gray-500">
-                                {qc.mode === 'new-item' ? (qc.unit || '單位') : (qc.selectedItemUnit || '單位')}
+                                {qc.selectedItemId ? qc.selectedItemUnit : (qc.newUnit || '單位')}
                               </span>
                               {(() => {
-                                const u = qc.mode === 'new-item' ? qc.unit : qc.selectedItemUnit
+                                const u = qc.selectedItemId ? qc.selectedItemUnit : qc.newUnit
                                 return u && qc.purchaseQty > 0 ? (
                                   <span className="text-xs text-blue-600 ml-auto">
                                     ${(effectivePrice(idx) / qc.purchaseQty).toFixed(2)}/{u}
@@ -655,7 +628,7 @@ export function ReceiptScanDialog({
                             </div>
                             <div className="flex gap-2">
                               <button onClick={() => saveQuickCreate(idx)}
-                                disabled={qc.saving || (qc.mode === 'new-item' ? !qc.itemName.trim() : !qc.selectedItemId)}
+                                disabled={qc.saving || (!qc.selectedItemId && !qc.itemSearch.trim()) || (!qc.selectedItemId && !qc.productName.trim() && !qc.itemSearch.trim())}
                                 className="flex-1 py-1.5 rounded-lg bg-blue-500 text-white text-xs font-medium disabled:opacity-40">
                                 {qc.saving ? '建立中…' : '建立並連結'}
                               </button>
