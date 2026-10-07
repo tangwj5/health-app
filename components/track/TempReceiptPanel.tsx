@@ -51,7 +51,7 @@ export function TempReceiptPanel({
   const supabase = createClient()
   const [items, setItems] = useState<ReceiptTempItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<ReceiptTempItem | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
 
   // Linking state
@@ -99,9 +99,9 @@ export function TempReceiptPanel({
     setItems(prev => prev.filter(i => !ids.includes(i.id)))
   }
 
-  async function deleteItem(id: string) {
-    await supabase.from('receipt_temp_items').delete().eq('id', id)
-    setItems(prev => prev.filter(i => i.id !== id))
+  async function deleteItem(item: ReceiptTempItem) {
+    await supabase.from('receipt_temp_items').delete().eq('id', item.id)
+    setItems(prev => prev.filter(i => i.id !== item.id))
     setDeleteConfirm(null)
   }
 
@@ -279,17 +279,12 @@ export function TempReceiptPanel({
                             <button onClick={() => skipConsumable(item)}
                               className="shrink-0 text-xs text-gray-400 hover:text-orange-400 px-2 py-0.5 rounded border border-gray-200 transition-colors"
                               title="不追蹤消耗品，保留對帳">略過</button>
-                          ) : deleteConfirm === item.id ? (
-                            <div className="flex gap-1 shrink-0">
-                              <button onClick={() => deleteItem(item.id)} className="text-xs text-red-500 px-1.5 py-0.5 rounded border border-red-200">刪</button>
-                              <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-400 px-1.5 py-0.5 rounded border border-gray-200">取消</button>
-                            </div>
                           ) : (
                             <div className="flex gap-1 shrink-0">
                               <button onClick={() => markProcessed(item.id)} title="標記已對帳" className="text-gray-300 hover:text-green-500 p-0.5 transition-colors">
                                 <Check className="h-4 w-4" />
                               </button>
-                              <button onClick={() => setDeleteConfirm(item.id)} className="text-gray-300 hover:text-red-400 p-0.5 transition-colors">
+                              <button onClick={() => setDeleteConfirm(item)} className="text-gray-300 hover:text-red-400 p-0.5 transition-colors">
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             </div>
@@ -411,5 +406,23 @@ export function TempReceiptPanel({
         </div>
       </div>
     </div>
+
+    {deleteConfirm && (
+      <div className="fixed inset-0 bg-black/50 z-[60] flex items-end">
+        <div className="bg-white w-full max-w-lg mx-auto rounded-t-2xl p-5 space-y-4">
+          <h3 className="text-sm font-semibold text-gray-800">確認刪除</h3>
+          <p className="text-sm text-gray-600">
+            確定要刪除「<span className="font-medium text-gray-800">{deleteConfirm.name}</span>」？
+          </p>
+          <p className="text-xs text-red-400">此筆明細將永久刪除，無法復原。</p>
+          <div className="flex gap-3 pt-1">
+            <button onClick={() => setDeleteConfirm(null)}
+              className="flex-1 py-3 rounded-xl border text-sm text-gray-500 font-medium">取消</button>
+            <button onClick={() => deleteItem(deleteConfirm)}
+              className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-medium">確認刪除</button>
+          </div>
+        </div>
+      </div>
+    )}
   )
 }
