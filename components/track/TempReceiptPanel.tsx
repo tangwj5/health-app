@@ -37,7 +37,7 @@ interface QuickCreate {
   productName: string
   category: ConsumableCategory
   unit: string
-  purchaseQty: number
+  purchaseQty: string
   saving: boolean
 }
 
@@ -58,7 +58,7 @@ export function TempReceiptPanel({
   // Linking state
   const [products, setProducts] = useState<ProductOption[]>([])
   const [linkingItem, setLinkingItem] = useState<ReceiptTempItem | null>(null)
-  const [linkQty, setLinkQty] = useState<number>(1)
+  const [linkQtyStr, setLinkQtyStr] = useState('1')
   const [productSearch, setProductSearch] = useState('')
   const [quickCreate, setQuickCreate] = useState<QuickCreate | null>(null)
   const [linking, setLinking] = useState(false)
@@ -112,7 +112,7 @@ export function TempReceiptPanel({
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, category: downgraded as any } : i))
   }
 
-  async function linkToProduct(productId: string) {
+  async function linkToProduct(productId: string, qty: number) {
     if (!linkingItem) return
     setLinking(true)
     try {
@@ -126,7 +126,7 @@ export function TempReceiptPanel({
         purchase_date: linkingItem.purchase_date,
         store: linkingItem.store ?? '未知通路',
         price: linkingItem.price,
-        quantity: linkQty,
+        quantity: qty,
         is_promotion: false,
         note: linkingItem.name,
       })
@@ -153,8 +153,9 @@ export function TempReceiptPanel({
         .select().single()
       if (!prodData) throw new Error()
       setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: quickCreate.itemName.trim(), item_unit: quickCreate.unit }, ...prev])
-      setLinkQty(quickCreate.purchaseQty)
-      await linkToProduct(prodData.id)
+      const qty = parseFloat(quickCreate.purchaseQty)
+      if (!qty || qty <= 0) throw new Error('invalid qty')
+      await linkToProduct(prodData.id, qty)
     } catch {
       setQuickCreate(prev => prev ? { ...prev, saving: false } : null)
     }
@@ -268,7 +269,7 @@ export function TempReceiptPanel({
                             <button
                               onClick={() => {
                                 if (isLinking) { setLinkingItem(null); setQuickCreate(null) }
-                                else { setLinkingItem(item); setLinkQty(item.quantity); setProductSearch(''); setQuickCreate(null) }
+                                else { setLinkingItem(item); setLinkQtyStr(String(item.quantity)); setProductSearch(''); setQuickCreate(null) }
                               }}
                               className="shrink-0 text-blue-400 hover:text-blue-600 p-0.5 transition-colors"
                               title="連結消耗品"
@@ -299,30 +300,35 @@ export function TempReceiptPanel({
                               <>
                                 <div className="flex items-center gap-2">
                                   <label className="text-xs text-gray-400 shrink-0">購入數量</label>
-                                  <input type="number" min="0.01" step="any" value={linkQty}
-                                    onChange={e => setLinkQty(parseFloat(e.target.value) || 1)}
-                                    className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                                  <span className="text-xs text-gray-400">（連結商品後顯示單位）</span>
+                                  <input type="number" min="0.01" step="any" value={linkQtyStr}
+                                    onChange={e => setLinkQtyStr(e.target.value)}
+                                    onFocus={e => e.target.select()}
+                                    className={`w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400 ${(!parseFloat(linkQtyStr) || parseFloat(linkQtyStr) <= 0) && linkQtyStr !== '' ? 'border-red-300' : ''}`} />
+                                  <span className="text-xs text-gray-400">（依商品單位填入）</span>
                                 </div>
                                 <input type="text" placeholder="搜尋現有商品…" value={productSearch} autoFocus
                                   onChange={e => setProductSearch(e.target.value)}
                                   className="w-full border rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                 <div className="max-h-36 overflow-y-auto space-y-1">
-                                  {filteredProducts.map(p => (
-                                    <button key={p.id} disabled={linking}
-                                      onClick={() => linkToProduct(p.id)}
+                                  {filteredProducts.map(p => {
+                                    const parsedQty = parseFloat(linkQtyStr)
+                                    return (
+                                    <button key={p.id} disabled={linking || !parsedQty || parsedQty <= 0}
+                                      onClick={() => { if (parsedQty > 0) linkToProduct(p.id, parsedQty) }}
                                       className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-40 flex items-center justify-between">
                                       <span>
                                         <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
                                         <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                        {p.item_unit && <span className="text-xs text-gray-300 ml-1">({p.item_unit})</span>}
                                       </span>
-                                      {p.item_unit && linkQty > 0 && (
+                                      {p.item_unit && parsedQty > 0 && (
                                         <span className="text-xs text-blue-500 shrink-0">
-                                          ${(item.price / linkQty).toFixed(2)}/{p.item_unit}
+                                          ${(item.price / parsedQty).toFixed(2)}/{p.item_unit}
                                         </span>
                                       )}
                                     </button>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                                 <button
                                   onClick={() => setQuickCreate({
@@ -330,7 +336,7 @@ export function TempReceiptPanel({
                                     productName: item.name,
                                     category: defaultConsumableCategory(item.category),
                                     unit: 'ml',
-                                    purchaseQty: linkQty,
+                                    purchaseQty: linkQtyStr,
                                     saving: false,
                                   })}
                                   className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border border-dashed border-blue-300 text-blue-500 text-xs hover:bg-blue-50 transition-colors"
@@ -376,12 +382,13 @@ export function TempReceiptPanel({
                                 <div className="flex items-center gap-2">
                                   <label className="text-xs text-gray-400 shrink-0">購入數量</label>
                                   <input type="number" min="0.01" step="any" value={quickCreate.purchaseQty}
-                                    onChange={e => setQuickCreate(prev => prev ? { ...prev, purchaseQty: parseFloat(e.target.value) || 1 } : null)}
+                                    onChange={e => setQuickCreate(prev => prev ? { ...prev, purchaseQty: e.target.value } : null)}
+                                    onFocus={e => e.target.select()}
                                     className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                   <span className="text-xs text-gray-500">{quickCreate.unit || '單位'}</span>
-                                  {quickCreate.unit && quickCreate.purchaseQty > 0 && (
+                                  {quickCreate.unit && parseFloat(quickCreate.purchaseQty) > 0 && (
                                     <span className="text-xs text-blue-600 ml-auto">
-                                      ${(item.price / quickCreate.purchaseQty).toFixed(2)}/{quickCreate.unit}
+                                      ${(item.price / parseFloat(quickCreate.purchaseQty)).toFixed(2)}/{quickCreate.unit}
                                     </span>
                                   )}
                                 </div>

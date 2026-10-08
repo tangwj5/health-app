@@ -55,7 +55,7 @@ interface QuickCreateState {
   newCategory: ConsumableCategory
   newUnit: string
   productName: string
-  purchaseQty: number
+  purchaseQty: string
   saving: boolean
 }
 
@@ -80,7 +80,7 @@ export function ReceiptScanDialog({
   const [purchaseDate, setPurchaseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [products, setProducts] = useState<ProductOption[]>([])
   const [linkedProduct, setLinkedProduct] = useState<Record<number, string>>({})
-  const [linkedQuantity, setLinkedQuantity] = useState<Record<number, number>>({})
+  const [linkedQuantity, setLinkedQuantity] = useState<Record<number, string>>({})
   const [pickerOpenIdx, setPickerOpenIdx] = useState<number | null>(null)
   const [productSearch, setProductSearch] = useState('')
   const [quickCreate, setQuickCreate] = useState<Record<number, QuickCreateState>>({})
@@ -193,7 +193,7 @@ export function ReceiptScanDialog({
 
   function linkProduct(idx: number, productId: string) {
     setLinkedProduct(prev => ({ ...prev, [idx]: productId }))
-    setLinkedQuantity(prev => ({ ...prev, [idx]: items[idx].quantity }))
+    setLinkedQuantity(prev => ({ ...prev, [idx]: String(items[idx].quantity) }))
     setPickerOpenIdx(null)
     setProductSearch('')
     setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
@@ -221,7 +221,7 @@ export function ReceiptScanDialog({
         newCategory: defaultConsumableCategory(items[idx].category),
         newUnit: 'ml',
         productName: '',
-        purchaseQty: items[idx].quantity,
+        purchaseQty: String(items[idx].quantity),
         saving: false,
       },
     }))
@@ -260,7 +260,7 @@ export function ReceiptScanDialog({
       if (!prodData) throw new Error()
       setProducts(prev => [{ ...(prodData as ConsumableProduct), item_name: itemName, item_unit: itemUnit }, ...prev])
       setLinkedProduct(prev => ({ ...prev, [idx]: prodData.id }))
-      setLinkedQuantity(prev => ({ ...prev, [idx]: qc.purchaseQty }))
+      setLinkedQuantity(prev => ({ ...prev, [idx]: String(parseFloat(qc.purchaseQty) || items[idx].quantity) }))
       setQuickCreate(prev => { const n = { ...prev }; delete n[idx]; return n })
       setPickerOpenIdx(null)
     } catch {
@@ -296,7 +296,7 @@ export function ReceiptScanDialog({
         })
 
         if (isConsumable(item.category) && productId) {
-          const purchaseQty = linkedQuantity[i] ?? item.quantity
+          const purchaseQty = parseFloat(linkedQuantity[i] ?? String(item.quantity)) || item.quantity
           await supabase.from('consumable_purchases').insert({
             product_id: productId,
             profile_id: profileId,
@@ -531,14 +531,15 @@ export function ReceiptScanDialog({
                               <label className="text-xs text-gray-400 shrink-0">購入數量</label>
                               <input
                                 type="number" min="0.01" step="any"
-                                value={linkedQuantity[idx] ?? item.quantity}
-                                onChange={e => setLinkedQuantity(prev => ({ ...prev, [idx]: parseFloat(e.target.value) || 1 }))}
+                                value={linkedQuantity[idx] ?? String(item.quantity)}
+                                onChange={e => setLinkedQuantity(prev => ({ ...prev, [idx]: e.target.value }))}
+                                onFocus={e => e.target.select()}
                                 className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
                               />
                               <span className="text-xs text-gray-500">{linkedProd.item_unit}</span>
-                              {(linkedQuantity[idx] ?? item.quantity) > 0 && (
+                              {parseFloat(linkedQuantity[idx] ?? String(item.quantity)) > 0 && (
                                 <span className="text-xs text-blue-600 ml-auto">
-                                  ${(netPrice / (linkedQuantity[idx] ?? item.quantity)).toFixed(2)}/{linkedProd.item_unit}
+                                  ${(netPrice / parseFloat(linkedQuantity[idx] ?? String(item.quantity))).toFixed(2)}/{linkedProd.item_unit}
                                 </span>
                               )}
                             </div>
@@ -612,16 +613,18 @@ export function ReceiptScanDialog({
                             <div className="flex items-center gap-2">
                               <label className="text-xs text-gray-400 shrink-0">購入數量</label>
                               <input type="number" min="0.01" step="any" value={qc.purchaseQty}
-                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], purchaseQty: parseFloat(e.target.value) || 1 } }))}
+                                onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], purchaseQty: e.target.value } }))}
+                                onFocus={e => e.target.select()}
                                 className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
                               <span className="text-xs text-gray-500">
                                 {qc.selectedItemId ? qc.selectedItemUnit : (qc.newUnit || '單位')}
                               </span>
                               {(() => {
                                 const u = qc.selectedItemId ? qc.selectedItemUnit : qc.newUnit
-                                return u && qc.purchaseQty > 0 ? (
+                                const qty = parseFloat(qc.purchaseQty)
+                                return u && qty > 0 ? (
                                   <span className="text-xs text-blue-600 ml-auto">
-                                    ${(effectivePrice(idx) / qc.purchaseQty).toFixed(2)}/{u}
+                                    ${(effectivePrice(idx) / qty).toFixed(2)}/{u}
                                   </span>
                                 ) : null
                               })()}
