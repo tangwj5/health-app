@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { format } from 'date-fns'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,14 +29,18 @@ async function writeMetrics(token: string, weight_kg: string | null, fat_pct: st
   if (!profileId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const now = new Date()
-  const todayUtc = format(now, 'yyyy-MM-dd')
+  // Use UTC+8 (Taiwan) day boundaries to avoid misclassification before 8am local time
+  const localNow = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+  const todayLocal = localNow.toISOString().slice(0, 10)
+  const dayStartUTC = new Date(`${todayLocal}T00:00:00+08:00`).toISOString()
+  const dayEndUTC = new Date(`${todayLocal}T23:59:59.999+08:00`).toISOString()
 
   const { data: existing } = await supabase
     .from('body_metrics')
     .select('id')
     .eq('profile_id', profileId)
-    .gte('recorded_at', `${todayUtc}T00:00:00.000Z`)
-    .lte('recorded_at', `${todayUtc}T23:59:59.999Z`)
+    .gte('recorded_at', dayStartUTC)
+    .lte('recorded_at', dayEndUTC)
     .limit(1)
 
   const isFirstOfDay = !existing || existing.length === 0
