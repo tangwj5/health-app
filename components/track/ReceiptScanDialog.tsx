@@ -536,8 +536,8 @@ export function ReceiptScanDialog({
                                 onFocus={e => e.target.select()}
                                 className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
                               />
-                              <span className="text-xs text-gray-500">{linkedProd.item_unit}</span>
-                              {parseFloat(linkedQuantity[idx] ?? String(item.quantity)) > 0 && (
+                              {linkedProd.item_unit && <span className="text-xs text-gray-500">{linkedProd.item_unit}</span>}
+                              {linkedProd.item_unit && parseFloat(linkedQuantity[idx] ?? String(item.quantity)) > 0 && (
                                 <span className="text-xs text-blue-600 ml-auto">
                                   ${(netPrice / parseFloat(linkedQuantity[idx] ?? String(item.quantity))).toFixed(2)}/{linkedProd.item_unit}
                                 </span>
@@ -654,9 +654,12 @@ export function ReceiptScanDialog({
                                 <div className="max-h-32 overflow-y-auto space-y-1">
                                   {filteredProducts.map(p => (
                                     <button key={p.id} onClick={() => linkProduct(idx, p.id)}
-                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors">
-                                      <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
-                                      <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-between">
+                                      <span>
+                                        <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
+                                        <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
+                                        {p.item_unit && <span className="text-xs text-gray-300 ml-1">({p.item_unit})</span>}
+                                      </span>
                                     </button>
                                   ))}
                                 </div>
