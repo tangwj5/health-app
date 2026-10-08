@@ -188,6 +188,7 @@ export function TempReceiptPanel({
   )
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
       <div className="bg-white w-full max-w-lg mx-auto rounded-t-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
@@ -450,5 +451,6 @@ export function TempReceiptPanel({
         </div>
       </div>
     )}
+    </>
   )
 }
