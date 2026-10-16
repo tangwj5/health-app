@@ -19,7 +19,7 @@ interface PurchaseStat {
 }
 
 interface ProductWithLatest extends ConsumableProduct {
-  latestPurchase?: Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store'>
+  latestPurchase?: Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store' | 'quantity'>
   avgUnitPrice?: number
   minPurchase?: PurchaseStat
   purchaseCount: number
@@ -245,7 +245,7 @@ function QuickPurchaseDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">數量</label>
+            <label className="text-xs text-gray-500 mb-1 block">數量（幾包/件）</label>
             <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
               min="1"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
@@ -311,7 +311,7 @@ export default function ItemDetailPage() {
       .in('product_id', (prodData as ConsumableProduct[]).map(p => p.id))
       .order('purchase_date', { ascending: false })
 
-    const latestByProduct: Record<string, Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store'>> = {}
+    const latestByProduct: Record<string, Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store' | 'quantity'>> = {}
     const purchasesByProduct: Record<string, Array<{ price: number; quantity: number; store: string; purchase_date: string }>> = {}
 
     for (const pur of purchaseData || []) {
@@ -324,7 +324,10 @@ export default function ItemDetailPage() {
       const purs = purchasesByProduct[p.id] || []
       const unitPriceEntries = purs
         .filter(pur => pur.quantity > 0)
-        .map(pur => ({ unitPrice: pur.price / pur.quantity, price: pur.price, store: pur.store, purchaseQty: pur.quantity }))
+        .map(pur => {
+          const denom = (p.capacity && p.capacity > 0) ? p.capacity * pur.quantity : pur.quantity
+          return { unitPrice: pur.price / denom, price: pur.price, store: pur.store, purchaseQty: pur.quantity }
+        })
       const avgUnitPrice = unitPriceEntries.length
         ? unitPriceEntries.reduce((sum, x) => sum + x.unitPrice, 0) / unitPriceEntries.length
         : undefined
@@ -358,8 +361,9 @@ export default function ItemDetailPage() {
   const unit = item.unit
 
   function latestUnitPrice(p: ProductWithLatest) {
-    if (!p.latestPurchase || !p.capacity) return null
-    return (p.latestPurchase.price / p.capacity).toFixed(2)
+    if (!p.latestPurchase || !(p.latestPurchase.quantity > 0)) return null
+    const denom = (p.capacity && p.capacity > 0) ? p.capacity * p.latestPurchase.quantity : p.latestPurchase.quantity
+    return (p.latestPurchase.price / denom).toFixed(2)
   }
 
   function nextBuyDate(p: ProductWithLatest) {

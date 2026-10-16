@@ -104,7 +104,7 @@ function PurchaseDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">數量</label>
+            <label className="text-xs text-gray-500 mb-1 block">數量（幾包/件）</label>
             <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
               min="1"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
