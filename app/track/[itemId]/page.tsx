@@ -18,6 +18,7 @@ interface PurchaseStat {
   price: number
   store: string
   purchaseQty: number
+  unitPrice: number
 }
 
 interface ProductWithLatest extends ConsumableProduct {
@@ -204,7 +205,7 @@ function ProductDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">容量（{unit}/包，選填）</label>
+            <label className="text-xs text-gray-500 mb-1 block">容量（{unit}/{packageUnit.trim() || '包'}，選填）</label>
             <input type="number" value={capacity} onChange={e => setCapacity(e.target.value)}
               placeholder="例：10"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
@@ -434,7 +435,7 @@ export default function ItemDetailPage() {
         ...p,
         latestPurchase: latestByProduct[p.id],
         avgUnitPrice,
-        minPurchase: minEntry ? { price: minEntry.price, store: minEntry.store, purchaseQty: minEntry.purchaseQty } : undefined,
+        minPurchase: minEntry ? { price: minEntry.price, store: minEntry.store, purchaseQty: minEntry.purchaseQty, unitPrice: minEntry.unitPrice } : undefined,
         purchaseCount: purs.length,
       }
     }))
@@ -503,9 +504,7 @@ export default function ItemDetailPage() {
           const up = latestUnitPrice(prod)
           const nextDate = nextBuyDate(prod)
           const daysLeft = nextDate ? Math.ceil((nextDate.getTime() - Date.now()) / 86400000) : null
-          const minUnitPrice = prod.minPurchase && prod.minPurchase.purchaseQty > 0
-            ? prod.minPurchase.price / prod.minPurchase.purchaseQty
-            : null
+          const minUnitPrice = prod.minPurchase?.unitPrice ?? null
 
           return (
             <div key={prod.id} className="bg-white rounded-2xl border">
@@ -522,7 +521,7 @@ export default function ItemDetailPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-semibold text-gray-800">{prod.name}</p>
                     {prod.brand && <span className="text-xs text-gray-400">{prod.brand}</span>}
-                    {prod.capacity && <span className="text-xs text-gray-400">{prod.capacity}{unit}</span>}
+                    {prod.capacity && <span className="text-xs text-gray-400">{prod.capacity}{unit}{prod.package_unit ? `/${prod.package_unit}` : ''}</span>}
                   </div>
                   {prod.latestPurchase ? (
                     <div className="mt-1 space-y-0.5">

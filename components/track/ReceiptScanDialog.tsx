@@ -528,8 +528,15 @@ export function ReceiptScanDialog({
                               <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
                             </div>
                             {(() => {
+                              const pkgLabel = linkedProd.package_unit?.trim() || '包'
                               const unitLabel = linkedProd.item_unit?.trim() || ''
                               const qty = parseFloat(linkedQuantity[idx] ?? String(item.quantity))
+                              const up = qty > 0
+                                ? (linkedProd.capacity
+                                    ? netPrice / (linkedProd.capacity * qty)
+                                    : netPrice / qty)
+                                : null
+                              const upLabel = linkedProd.capacity && unitLabel ? unitLabel : pkgLabel
                               return (
                                 <div className="flex items-center gap-2 pl-5">
                                   <label className="text-xs text-gray-400 shrink-0">購入數量</label>
@@ -540,13 +547,10 @@ export function ReceiptScanDialog({
                                     onFocus={e => e.target.select()}
                                     className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
                                   />
-                                  {unitLabel
-                                    ? <span className="text-xs text-gray-500">{unitLabel}</span>
-                                    : <span className="text-xs text-gray-400">（未設單位）</span>
-                                  }
-                                  {unitLabel && qty > 0 && (
+                                  <span className="text-xs text-gray-500">{pkgLabel}</span>
+                                  {up !== null && (
                                     <span className="text-xs text-blue-600 ml-auto">
-                                      ${(netPrice / qty).toFixed(2)}/{unitLabel}
+                                      ${up.toFixed(2)}/{upLabel}
                                     </span>
                                   )}
                                 </div>
@@ -626,17 +630,13 @@ export function ReceiptScanDialog({
                                 onFocus={e => e.target.select()}
                                 className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
                               {(() => {
-                                const u = (qc.selectedItemId ? qc.selectedItemUnit : qc.newUnit)?.trim() || ''
                                 const qty = parseFloat(qc.purchaseQty)
                                 return (
                                   <>
-                                    {u
-                                      ? <span className="text-xs text-gray-500">{u}</span>
-                                      : <span className="text-xs text-gray-400">（未設單位）</span>
-                                    }
-                                    {u && qty > 0 && (
+                                    <span className="text-xs text-gray-500">包</span>
+                                    {qty > 0 && (
                                       <span className="text-xs text-blue-600 ml-auto">
-                                        ${(effectivePrice(idx) / qty).toFixed(2)}/{u}
+                                        ${(effectivePrice(idx) / qty).toFixed(2)}/包
                                       </span>
                                     )}
                                   </>

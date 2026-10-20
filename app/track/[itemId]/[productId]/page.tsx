@@ -150,10 +150,11 @@ function PurchaseDialog({
 }
 
 // Simple SVG price trend chart
-function PriceChart({ purchases, unit, capacity }: {
+function PriceChart({ purchases, unit, capacity, packageUnit }: {
   purchases: ConsumablePurchase[]
   unit: string
   capacity: number | null
+  packageUnit?: string | null
 }) {
   const sorted = [...purchases].sort((a, b) => a.purchase_date.localeCompare(b.purchase_date))
   if (sorted.length < 2) return null
@@ -179,7 +180,7 @@ function PriceChart({ purchases, unit, capacity }: {
   const px = (t: number) => PAD + ((t - minT) / tSpan) * (W - PAD * 2)
   const py = (v: number) => (H - PAD) - ((v - minV) / range) * (H - PAD * 2)
 
-  const label = capacity ? `NT$ / ${unit}` : `NT$ / 件`
+  const label = capacity ? `NT$ / ${unit}` : `NT$ / ${packageUnit?.trim() || '件'}`
 
   return (
     <div className="bg-white rounded-2xl border p-4">
@@ -346,7 +347,7 @@ export default function ProductDetailPage() {
             <div className="mt-3 pt-3 border-t space-y-1">
               {minPrice != null && (
                 <p className="text-xs text-gray-500">
-                  歷史最低 <span className="font-semibold text-green-600">NT${minPrice.toFixed(0)}</span>
+                  歷史最低 <span className="font-semibold text-green-600">NT${minPrice.toFixed(0)}/{product.package_unit?.trim() || '包'}</span>
                   {maxPrice !== minPrice && <span className="text-gray-400"> ／ 最高 NT${maxPrice!.toFixed(0)}</span>}
                 </p>
               )}
@@ -356,7 +357,7 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Chart */}
-        <PriceChart purchases={[...purchases].reverse()} unit={unit} capacity={product.capacity} />
+        <PriceChart purchases={[...purchases].reverse()} unit={unit} capacity={product.capacity} packageUnit={product.package_unit} />
 
         {/* Purchase history */}
         <div className="bg-white rounded-2xl border p-4">
