@@ -238,12 +238,16 @@ function QuickPurchaseDialog({
   productId,
   profileId,
   productName,
+  itemUnit,
+  capacity,
   onClose,
   onSaved,
 }: {
   productId: string
   profileId: string
   productName: string
+  itemUnit?: string | null
+  capacity?: number | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -316,7 +320,13 @@ function QuickPurchaseDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">數量（幾包/件）</label>
+            {(() => {
+              const u = itemUnit?.trim()
+              const label = capacity && u
+                ? `數量（幾包，每包${capacity}${u}）`
+                : u ? `數量（幾${u}）` : '數量（幾包/件）'
+              return <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+            })()}
             <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
               min="1"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
@@ -591,6 +601,8 @@ export default function ItemDetailPage() {
           productId={quickPurchaseProduct.id}
           profileId={profile!.id}
           productName={quickPurchaseProduct.name}
+          itemUnit={unit}
+          capacity={quickPurchaseProduct.capacity}
           onClose={() => setQuickPurchaseProduct(null)}
           onSaved={() => { setQuickPurchaseProduct(null); load() }}
         />

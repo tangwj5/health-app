@@ -15,6 +15,8 @@ function PurchaseDialog({
   productId,
   profileId,
   productName,
+  itemUnit,
+  capacity,
   initial,
   onClose,
   onSaved,
@@ -22,6 +24,8 @@ function PurchaseDialog({
   productId: string
   profileId: string
   productName: string
+  itemUnit?: string | null
+  capacity?: number | null
   initial?: ConsumablePurchase
   onClose: () => void
   onSaved: () => void
@@ -104,7 +108,13 @@ function PurchaseDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">數量（幾包/件）</label>
+            {(() => {
+              const u = itemUnit?.trim()
+              const label = capacity && u
+                ? `數量（幾包，每包${capacity}${u}）`
+                : u ? `數量（幾${u}）` : '數量（幾包/件）'
+              return <label className="text-xs text-gray-500 mb-1 block">{label}</label>
+            })()}
             <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
               min="1"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
@@ -403,6 +413,8 @@ export default function ProductDetailPage() {
           productId={productId}
           profileId={profile!.id}
           productName={product.name}
+          itemUnit={item.unit}
+          capacity={product.capacity}
           onClose={() => setShowAddPurchase(false)}
           onSaved={() => { setShowAddPurchase(false); load() }}
         />
@@ -412,6 +424,8 @@ export default function ProductDetailPage() {
           productId={productId}
           profileId={profile!.id}
           productName={product.name}
+          itemUnit={item.unit}
+          capacity={product.capacity}
           initial={editingPurchase}
           onClose={() => setEditingPurchase(null)}
           onSaved={() => { setEditingPurchase(null); load() }}
