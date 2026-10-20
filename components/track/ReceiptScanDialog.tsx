@@ -387,13 +387,13 @@ export function ReceiptScanDialog({
 
         {step === 'review' && (
           <>
-            <div className="px-5 pb-3 flex gap-3 shrink-0">
-              <div className="flex-1">
+            <div className="px-5 pb-3 grid grid-cols-2 gap-2 shrink-0">
+              <div className="min-w-0">
                 <label className="text-xs text-gray-400 block mb-1">消費日期</label>
                 <input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)}
                   className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0">
                 <label className="text-xs text-gray-400 block mb-1">通路</label>
                 <input list="store-list" value={store} onChange={e => setStore(e.target.value)}
                   placeholder="選擇或輸入通路"
@@ -527,22 +527,31 @@ export function ReceiptScanDialog({
                               </span>
                               <button onClick={() => unlinkProduct(idx)} className="text-xs text-gray-400 underline shrink-0">取消</button>
                             </div>
-                            <div className="flex items-center gap-2 pl-5">
-                              <label className="text-xs text-gray-400 shrink-0">購入數量</label>
-                              <input
-                                type="number" min="0.01" step="any"
-                                value={linkedQuantity[idx] ?? String(item.quantity)}
-                                onChange={e => setLinkedQuantity(prev => ({ ...prev, [idx]: e.target.value }))}
-                                onFocus={e => e.target.select()}
-                                className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
-                              />
-                              {linkedProd.item_unit && <span className="text-xs text-gray-500">{linkedProd.item_unit}</span>}
-                              {linkedProd.item_unit && parseFloat(linkedQuantity[idx] ?? String(item.quantity)) > 0 && (
-                                <span className="text-xs text-blue-600 ml-auto">
-                                  ${(netPrice / parseFloat(linkedQuantity[idx] ?? String(item.quantity))).toFixed(2)}/{linkedProd.item_unit}
-                                </span>
-                              )}
-                            </div>
+                            {(() => {
+                              const unitLabel = linkedProd.item_unit?.trim() || ''
+                              const qty = parseFloat(linkedQuantity[idx] ?? String(item.quantity))
+                              return (
+                                <div className="flex items-center gap-2 pl-5">
+                                  <label className="text-xs text-gray-400 shrink-0">購入數量</label>
+                                  <input
+                                    type="number" min="0.01" step="any"
+                                    value={linkedQuantity[idx] ?? String(item.quantity)}
+                                    onChange={e => setLinkedQuantity(prev => ({ ...prev, [idx]: e.target.value }))}
+                                    onFocus={e => e.target.select()}
+                                    className="w-20 border rounded-lg px-2 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                  />
+                                  {unitLabel
+                                    ? <span className="text-xs text-gray-500">{unitLabel}</span>
+                                    : <span className="text-xs text-gray-400">（未設單位）</span>
+                                  }
+                                  {unitLabel && qty > 0 && (
+                                    <span className="text-xs text-blue-600 ml-auto">
+                                      ${(netPrice / qty).toFixed(2)}/{unitLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </div>
                         ) : qc ? (
                           <div className="mt-2 space-y-2">
@@ -616,17 +625,22 @@ export function ReceiptScanDialog({
                                 onChange={e => setQuickCreate(prev => ({ ...prev, [idx]: { ...prev[idx], purchaseQty: e.target.value } }))}
                                 onFocus={e => e.target.select()}
                                 className="w-20 border rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
-                              <span className="text-xs text-gray-500">
-                                {qc.selectedItemId ? qc.selectedItemUnit : (qc.newUnit || '單位')}
-                              </span>
                               {(() => {
-                                const u = qc.selectedItemId ? qc.selectedItemUnit : qc.newUnit
+                                const u = (qc.selectedItemId ? qc.selectedItemUnit : qc.newUnit)?.trim() || ''
                                 const qty = parseFloat(qc.purchaseQty)
-                                return u && qty > 0 ? (
-                                  <span className="text-xs text-blue-600 ml-auto">
-                                    ${(effectivePrice(idx) / qty).toFixed(2)}/{u}
-                                  </span>
-                                ) : null
+                                return (
+                                  <>
+                                    {u
+                                      ? <span className="text-xs text-gray-500">{u}</span>
+                                      : <span className="text-xs text-gray-400">（未設單位）</span>
+                                    }
+                                    {u && qty > 0 && (
+                                      <span className="text-xs text-blue-600 ml-auto">
+                                        ${(effectivePrice(idx) / qty).toFixed(2)}/{u}
+                                      </span>
+                                    )}
+                                  </>
+                                )
                               })()}
                             </div>
                             <div className="flex gap-2">

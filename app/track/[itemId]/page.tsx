@@ -11,6 +11,8 @@ import { format, parseISO, addDays } from 'date-fns'
 import type { ConsumableItem, ConsumableProduct, ConsumablePurchase } from '@/types'
 
 const DEFAULT_STORES = ['好市多', '全聯', '7-11', '全家']
+const ITEM_CATEGORIES = ['食品飲料', '保養藥品', '個人護理', '餐廚清潔', '其他'] as const
+const ITEM_UNITS = ['ml', 'g', '顆', '片', '個', '包', '瓶', '罐', '條', '盒', '組', '支', '雙', '件', '份', '次']
 
 interface PurchaseStat {
   price: number
@@ -23,6 +25,75 @@ interface ProductWithLatest extends ConsumableProduct {
   avgUnitPrice?: number
   minPurchase?: PurchaseStat
   purchaseCount: number
+}
+
+function ItemEditDialog({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: ConsumableItem
+  onClose: () => void
+  onSaved: (updated: ConsumableItem) => void
+}) {
+  const supabase = createClient()
+  const [name, setName] = useState(item.name)
+  const [category, setCategory] = useState(item.category)
+  const [unit, setUnit] = useState(item.unit ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    if (!name.trim()) return
+    setSaving(true)
+    const { data } = await supabase
+      .from('consumable_items')
+      .update({ name: name.trim(), category, unit: unit.trim() || null })
+      .eq('id', item.id)
+      .select().single()
+    setSaving(false)
+    if (data) onSaved(data as ConsumableItem)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end">
+      <div className="bg-white w-full max-w-lg mx-auto rounded-t-2xl p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800">編輯品項</h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-gray-400" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">品項名稱</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">類別</label>
+            <select value={category} onChange={e => setCategory(e.target.value as typeof ITEM_CATEGORIES[number])}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400">
+              {ITEM_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">單位</label>
+            <input list="item-edit-unit-list" value={unit} onChange={e => setUnit(e.target.value)}
+              placeholder="例：顆、ml、g"
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+            <datalist id="item-edit-unit-list">
+              {ITEM_UNITS.map(u => <option key={u} value={u} />)}
+            </datalist>
+          </div>
+        </div>
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border text-sm text-gray-500">取消</button>
+          <button onClick={save} disabled={saving || !name.trim()}
+            className="flex-1 py-2.5 rounded-xl bg-green-500 text-white text-sm font-medium disabled:opacity-50">
+            {saving ? '儲存中…' : '儲存'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function ProductDialog({
@@ -290,6 +361,7 @@ export default function ItemDetailPage() {
   const [products, setProducts] = useState<ProductWithLatest[]>([])
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [editingProduct, setEditingProduct] = useState<ConsumableProduct | null>(null)
+  const [editingItem, setEditingItem] = useState(false)
   const [quickPurchaseProduct, setQuickPurchaseProduct] = useState<ConsumableProduct | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
@@ -379,13 +451,18 @@ export default function ItemDetailPage() {
             <button onClick={() => router.push('/track?tab=消耗品')} className="text-gray-400 hover:text-gray-600">
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <div className="flex-1">
-              <h1 className="text-base font-semibold text-gray-800">{item.name}</h1>
-              <p className="text-xs text-gray-400">{item.category}・單位：{unit}</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-base font-semibold text-gray-800 truncate">{item.name}</h1>
+                <button onClick={() => setEditingItem(true)} className="text-gray-300 hover:text-gray-500 shrink-0">
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">{item.category}・單位：{unit || '（未設定）'}</p>
             </div>
             <button
               onClick={() => setShowAddProduct(true)}
-              className="flex items-center gap-1 text-xs text-green-600 font-medium"
+              className="flex items-center gap-1 text-xs text-green-600 font-medium shrink-0"
             >
               <Plus className="h-4 w-4" />新增商品
             </button>
@@ -516,6 +593,13 @@ export default function ItemDetailPage() {
           productName={quickPurchaseProduct.name}
           onClose={() => setQuickPurchaseProduct(null)}
           onSaved={() => { setQuickPurchaseProduct(null); load() }}
+        />
+      )}
+      {editingItem && (
+        <ItemEditDialog
+          item={item}
+          onClose={() => setEditingItem(false)}
+          onSaved={updated => { setItem(updated); setEditingItem(false) }}
         />
       )}
 
