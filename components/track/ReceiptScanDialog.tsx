@@ -672,7 +672,14 @@ export function ReceiptScanDialog({
                                       <span>
                                         <span className="text-xs font-medium text-gray-800">{p.item_name}</span>
                                         <span className="text-xs text-gray-400 ml-1">· {p.name}</span>
-                                        {p.item_unit && <span className="text-xs text-gray-300 ml-1">({p.item_unit})</span>}
+                                        {(() => {
+                                          const pu = p.package_unit?.trim()
+                                          const u = p.item_unit?.trim()
+                                          if (pu && p.capacity && u) return <span className="text-xs text-gray-300 ml-1">({pu}，每{pu}{p.capacity}{u})</span>
+                                          if (pu) return <span className="text-xs text-gray-300 ml-1">({pu})</span>
+                                          if (u) return <span className="text-xs text-gray-300 ml-1">({u})</span>
+                                          return null
+                                        })()}
                                       </span>
                                     </button>
                                   ))}
