@@ -32,23 +32,30 @@ export async function POST(req: NextRequest) {
 
 只回傳 JSON，不要其他文字或 markdown 格式。`
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { text: prompt },
-          { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } },
-        ]}],
-      }),
-    }
-  )
+  const body = JSON.stringify({
+    contents: [{ parts: [
+      { text: prompt },
+      { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } },
+    ]}],
+  })
 
-  if (!res.ok) {
-    const err = await res.text()
-    return NextResponse.json({ error: `Gemini error: ${err}` }, { status: 500 })
+  let res: Response | null = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt))
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
+    )
+    if (res.ok || res.status !== 503) break
+  }
+
+  if (!res || !res.ok) {
+    const status = res?.status ?? 500
+    const errText = res ? await res.text() : '無法連線'
+    const userMsg = status === 503
+      ? 'AI 辨識服務目前流量過高，請稍後再試'
+      : `掃描失敗（${status}），請稍後再試`
+    return NextResponse.json({ error: userMsg, detail: errText }, { status: 500 })
   }
 
   const data = await res.json()
