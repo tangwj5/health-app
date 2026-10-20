@@ -17,6 +17,7 @@ function PurchaseDialog({
   productName,
   itemUnit,
   capacity,
+  packageUnit,
   initial,
   onClose,
   onSaved,
@@ -26,6 +27,7 @@ function PurchaseDialog({
   productName: string
   itemUnit?: string | null
   capacity?: number | null
+  packageUnit?: string | null
   initial?: ConsumablePurchase
   onClose: () => void
   onSaved: () => void
@@ -110,8 +112,9 @@ function PurchaseDialog({
           <div>
             {(() => {
               const u = itemUnit?.trim()
+              const pu = packageUnit?.trim() || '包'
               const label = capacity && u
-                ? `數量（幾包，每包${capacity}${u}）`
+                ? `數量（幾${pu}，每${pu}${capacity}${u}）`
                 : u ? `數量（幾${u}）` : '數量（幾包/件）'
               return <label className="text-xs text-gray-500 mb-1 block">{label}</label>
             })()}
@@ -415,6 +418,7 @@ export default function ProductDetailPage() {
           productName={product.name}
           itemUnit={item.unit}
           capacity={product.capacity}
+          packageUnit={product.package_unit}
           onClose={() => setShowAddPurchase(false)}
           onSaved={() => { setShowAddPurchase(false); load() }}
         />
@@ -426,6 +430,7 @@ export default function ProductDetailPage() {
           productName={product.name}
           itemUnit={item.unit}
           capacity={product.capacity}
+          packageUnit={product.package_unit}
           initial={editingPurchase}
           onClose={() => setEditingPurchase(null)}
           onSaved={() => { setEditingPurchase(null); load() }}

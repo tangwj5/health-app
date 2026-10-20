@@ -115,6 +115,7 @@ function ProductDialog({
   const [name, setName] = useState(initial?.name ?? '')
   const [brand, setBrand] = useState(initial?.brand ?? '')
   const [capacity, setCapacity] = useState(initial?.capacity?.toString() ?? '')
+  const [packageUnit, setPackageUnit] = useState(initial?.package_unit ?? '')
   const [estimatedDays, setEstimatedDays] = useState(initial?.estimated_days?.toString() ?? '')
   const [note, setNote] = useState(initial?.note ?? '')
   const [photoUrl, setPhotoUrl] = useState(initial?.photo_url ?? '')
@@ -142,6 +143,7 @@ function ProductDialog({
       name: name.trim(),
       brand: brand.trim() || null,
       capacity: capacity ? parseFloat(capacity) : null,
+      package_unit: packageUnit.trim() || null,
       estimated_days: estimatedDays ? parseInt(estimatedDays) : null,
       note: note.trim() || null,
       photo_url: photoUrl || null,
@@ -202,10 +204,19 @@ function ProductDialog({
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
           <div>
-            <label className="text-xs text-gray-500 mb-1 block">容量（{unit}，選填）</label>
+            <label className="text-xs text-gray-500 mb-1 block">容量（{unit}/包，選填）</label>
             <input type="number" value={capacity} onChange={e => setCapacity(e.target.value)}
-              placeholder="例：400"
+              placeholder="例：10"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">購入單位（選填）</label>
+            <input list="pkg-unit-list" value={packageUnit} onChange={e => setPackageUnit(e.target.value)}
+              placeholder="包、盒、瓶、箱…"
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
+            <datalist id="pkg-unit-list">
+              {['包', '盒', '瓶', '箱', '罐', '袋', '條', '組'].map(u => <option key={u} value={u} />)}
+            </datalist>
           </div>
           <div className="col-span-2">
             <label className="text-xs text-gray-500 mb-1 block">預估使用天數（選填）</label>
@@ -240,6 +251,7 @@ function QuickPurchaseDialog({
   productName,
   itemUnit,
   capacity,
+  packageUnit,
   onClose,
   onSaved,
 }: {
@@ -248,6 +260,7 @@ function QuickPurchaseDialog({
   productName: string
   itemUnit?: string | null
   capacity?: number | null
+  packageUnit?: string | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -322,8 +335,9 @@ function QuickPurchaseDialog({
           <div>
             {(() => {
               const u = itemUnit?.trim()
+              const pu = packageUnit?.trim() || '包'
               const label = capacity && u
-                ? `數量（幾包，每包${capacity}${u}）`
+                ? `數量（幾${pu}，每${pu}${capacity}${u}）`
                 : u ? `數量（幾${u}）` : '數量（幾包/件）'
               return <label className="text-xs text-gray-500 mb-1 block">{label}</label>
             })()}
@@ -603,6 +617,7 @@ export default function ItemDetailPage() {
           productName={quickPurchaseProduct.name}
           itemUnit={unit}
           capacity={quickPurchaseProduct.capacity}
+          packageUnit={quickPurchaseProduct.package_unit}
           onClose={() => setQuickPurchaseProduct(null)}
           onSaved={() => { setQuickPurchaseProduct(null); load() }}
         />

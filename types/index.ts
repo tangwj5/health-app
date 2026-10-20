@@ -113,6 +113,7 @@ export interface ConsumableProduct {
   name: string
   brand: string | null
   capacity: number | null
+  package_unit: string | null
   photo_url: string | null
   estimated_days: number | null
   note: string | null
