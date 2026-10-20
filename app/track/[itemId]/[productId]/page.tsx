@@ -289,8 +289,9 @@ export default function ProductDetailPage() {
   })()
 
   const latest = purchases[0]
-  const nextBuy = latest && product.estimated_days
-    ? addDays(parseISO(latest.purchase_date), product.estimated_days) : null
+  const effectiveDays = product.estimated_days ?? avgInterval
+  const nextBuy = latest && effectiveDays
+    ? addDays(parseISO(latest.purchase_date), effectiveDays) : null
   const daysLeft = nextBuy ? Math.ceil((nextBuy.getTime() - Date.now()) / 86400000) : null
 
   const allPrices = purchases.map(p => p.price / p.quantity)

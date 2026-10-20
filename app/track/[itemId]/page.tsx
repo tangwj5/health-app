@@ -24,6 +24,7 @@ interface PurchaseStat {
 interface ProductWithLatest extends ConsumableProduct {
   latestPurchase?: Pick<ConsumablePurchase, 'purchase_date' | 'price' | 'store' | 'quantity'>
   avgUnitPrice?: number
+  avgInterval?: number
   minPurchase?: PurchaseStat
   purchaseCount: number
 }
@@ -419,6 +420,15 @@ export default function ItemDetailPage() {
 
     setProducts((prodData as ConsumableProduct[]).map(p => {
       const purs = purchasesByProduct[p.id] || []
+      const avgInterval = (() => {
+        if (purs.length < 2) return undefined
+        const sorted = [...purs].sort((a, b) => a.purchase_date.localeCompare(b.purchase_date))
+        let total = 0
+        for (let i = 1; i < sorted.length; i++) {
+          total += (parseISO(sorted[i].purchase_date).getTime() - parseISO(sorted[i - 1].purchase_date).getTime()) / 86400000
+        }
+        return Math.round(total / (sorted.length - 1))
+      })()
       const unitPriceEntries = purs
         .filter(pur => pur.quantity > 0)
         .map(pur => {
@@ -435,6 +445,7 @@ export default function ItemDetailPage() {
         ...p,
         latestPurchase: latestByProduct[p.id],
         avgUnitPrice,
+        avgInterval,
         minPurchase: minEntry ? { price: minEntry.price, store: minEntry.store, purchaseQty: minEntry.purchaseQty, unitPrice: minEntry.unitPrice } : undefined,
         purchaseCount: purs.length,
       }
@@ -464,8 +475,9 @@ export default function ItemDetailPage() {
   }
 
   function nextBuyDate(p: ProductWithLatest) {
-    if (!p.latestPurchase || !p.estimated_days) return null
-    return addDays(parseISO(p.latestPurchase.purchase_date), p.estimated_days)
+    const days = p.estimated_days ?? p.avgInterval
+    if (!p.latestPurchase || !days) return null
+    return addDays(parseISO(p.latestPurchase.purchase_date), days)
   }
 
   return (
