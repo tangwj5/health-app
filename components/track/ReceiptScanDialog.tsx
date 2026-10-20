@@ -100,7 +100,7 @@ export function ReceiptScanDialog({
   async function loadProducts() {
     const { data } = await supabase
       .from('consumable_products')
-      .select('*, consumable_items(name)')
+      .select('*, consumable_items(name, unit)')
       .eq('profile_id', profileId)
       .order('created_at', { ascending: false })
     if (data) {
