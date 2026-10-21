@@ -57,7 +57,7 @@ function PurchaseDialog({
       purchase_date: date,
       store: finalStore.trim(),
       price: parseFloat(price),
-      quantity: parseInt(quantity) || 1,
+      quantity: parseFloat(quantity) || 1,
       is_promotion: isPromo,
       note: note.trim() || null,
     }
@@ -119,7 +119,7 @@ function PurchaseDialog({
               return <label className="text-xs text-gray-500 mb-1 block">{label}</label>
             })()}
             <input type="number" value={quantity} onChange={e => setQuantity(e.target.value)}
-              min="1"
+              min="0.01" step="any"
               className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400" />
           </div>
         </div>

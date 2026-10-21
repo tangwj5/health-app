@@ -214,13 +214,13 @@ export function ReceiptScanDialog({
     setQuickCreate(prev => ({
       ...prev,
       [idx]: {
-        itemSearch: suggestedName,
+        itemSearch: '',
         selectedItemId: '',
         selectedItemName: '',
         selectedItemUnit: '',
         newCategory: defaultConsumableCategory(items[idx].category),
         newUnit: 'ml',
-        productName: '',
+        productName: suggestedName,
         purchaseQty: String(items[idx].quantity),
         saving: false,
       },
