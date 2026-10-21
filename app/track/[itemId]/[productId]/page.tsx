@@ -411,6 +411,34 @@ export default function ProductDetailPage() {
         {/* Chart */}
         <PriceChart purchases={[...purchases].reverse()} unit={unit} capacity={product.capacity} packageUnit={product.package_unit} />
 
+        {/* Usage logs */}
+        {usageLogs.length > 0 && (
+          <div className="bg-white rounded-2xl border p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">開封／用完紀錄</p>
+            <div className="space-y-1">
+              {[...usageLogs].reverse().map(log => (
+                <div key={log.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                  <span className={`text-xs font-medium w-10 shrink-0 ${log.action === 'opened' ? 'text-purple-500' : 'text-orange-400'}`}>
+                    {log.action === 'opened' ? '開封' : '用完'}
+                  </span>
+                  <span className="text-xs text-gray-400 flex-1">
+                    {format(parseISO(log.logged_at), 'yyyy/M/d')}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      await supabase.from('consumable_usage_logs').delete().eq('id', log.id)
+                      load()
+                    }}
+                    className="p-1 text-gray-200 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Purchase history */}
         <div className="bg-white rounded-2xl border p-4">
           <p className="text-sm font-semibold text-gray-700 mb-3">購買紀錄</p>
