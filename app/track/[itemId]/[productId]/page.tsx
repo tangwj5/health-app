@@ -248,6 +248,8 @@ export default function ProductDetailPage() {
   const [showAddPurchase, setShowAddPurchase] = useState(false)
   const [editingPurchase, setEditingPurchase] = useState<ConsumablePurchase | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [editingLogId, setEditingLogId] = useState<string | null>(null)
+  const [editingLogDate, setEditingLogDate] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: itemData }, { data: prodData }, { data: purData }, { data: usageData }] = await Promise.all([
@@ -281,6 +283,12 @@ export default function ProductDetailPage() {
     await supabase.from('consumable_purchases').delete().eq('id', id)
     setPurchases(prev => prev.filter(p => p.id !== id))
     setConfirmDelete(null)
+  }
+
+  async function saveLogDate(id: string, date: string) {
+    await supabase.from('consumable_usage_logs').update({ logged_at: date }).eq('id', id)
+    setEditingLogId(null)
+    load()
   }
 
   if (!item || !product) return (
@@ -389,8 +397,8 @@ export default function ProductDetailPage() {
             <div className="mt-3 pt-3 border-t space-y-1">
               {avgUsageDays !== null && (
                 <p className="text-xs text-gray-500">
-                  實際使用 <span className="font-semibold text-purple-600">{avgUsageDays} 天/瓶</span>
-                  <span className="text-gray-400 ml-1">（{finishedCount} 瓶記錄）</span>
+                  實際使用 <span className="font-semibold text-purple-600">{avgUsageDays} 天/{product.package_unit?.trim() || '個'}</span>
+                  <span className="text-gray-400 ml-1">（{finishedCount} {product.package_unit?.trim() || '個'}記錄）</span>
                   {hasOpenUnit && <span className="ml-2 text-purple-400">● 使用中</span>}
                 </p>
               )}
@@ -421,9 +429,24 @@ export default function ProductDetailPage() {
                   <span className={`text-xs font-medium w-10 shrink-0 ${log.action === 'opened' ? 'text-purple-500' : 'text-orange-400'}`}>
                     {log.action === 'opened' ? '開封' : '用完'}
                   </span>
-                  <span className="text-xs text-gray-400 flex-1">
-                    {format(parseISO(log.logged_at), 'yyyy/M/d')}
-                  </span>
+                  {editingLogId === log.id ? (
+                    <input
+                      type="date"
+                      value={editingLogDate}
+                      onChange={e => setEditingLogDate(e.target.value)}
+                      onBlur={() => saveLogDate(log.id, editingLogDate)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveLogDate(log.id, editingLogDate); if (e.key === 'Escape') setEditingLogId(null) }}
+                      autoFocus
+                      className="flex-1 border rounded-lg px-2 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setEditingLogId(log.id); setEditingLogDate(log.logged_at.slice(0, 10)) }}
+                      className="flex-1 text-left text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      {format(parseISO(log.logged_at), 'yyyy/M/d')}
+                    </button>
+                  )}
                   <button
                     onClick={async () => {
                       await supabase.from('consumable_usage_logs').delete().eq('id', log.id)
