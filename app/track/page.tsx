@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import Link from 'next/link'
 import { format, parseISO, subDays, addDays, differenceInCalendarDays } from 'date-fns'
-import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2, ChevronRight, Package, ScanLine } from 'lucide-react'
+import { Plus, Check, X, Search, ChevronDown, ChevronUp, Pin, Pencil, Trash2, ChevronRight, Package, ScanLine, ShoppingCart } from 'lucide-react'
 import { computeScheduleStatus, scheduleLabel } from '@/lib/schedule'
 import { ReceiptScanDialog } from '@/components/track/ReceiptScanDialog'
 import { TempReceiptPanel } from '@/components/track/TempReceiptPanel'
@@ -1159,6 +1159,12 @@ function ConsumablesTab({ profile }: { profile: Profile }) {
               <span className="bg-orange-500 text-white rounded-full px-1.5 py-0.5 text-xs leading-none">{tempCount}</span>
             </button>
           )}
+          <Link
+            href="/track/shopping-list"
+            className="flex items-center gap-1 text-xs text-purple-500 font-medium"
+          >
+            <ShoppingCart className="h-4 w-4" />補貨清單
+          </Link>
           <button
             onClick={() => setShowScan(true)}
             className="flex items-center gap-1 text-xs text-blue-500 font-medium"

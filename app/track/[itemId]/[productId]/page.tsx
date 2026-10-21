@@ -5,9 +5,9 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store'
 import { BottomNav } from '@/components/layout/BottomNav'
-import { ChevronLeft, Plus, Pencil, Trash2, Star, X } from 'lucide-react'
-import { format, parseISO, addDays } from 'date-fns'
-import type { ConsumableItem, ConsumableProduct, ConsumablePurchase } from '@/types'
+import { ChevronLeft, Plus, Pencil, Trash2, Star, X, PackageOpen, PackageCheck } from 'lucide-react'
+import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
+import type { ConsumableItem, ConsumableProduct, ConsumablePurchase, ConsumableUsageLog } from '@/types'
 
 const DEFAULT_STORES = ['好市多', '全聯', '7-11', '全家']
 
@@ -244,21 +244,36 @@ export default function ProductDetailPage() {
   const [item, setItem] = useState<ConsumableItem | null>(null)
   const [product, setProduct] = useState<ConsumableProduct | null>(null)
   const [purchases, setPurchases] = useState<ConsumablePurchase[]>([])
+  const [usageLogs, setUsageLogs] = useState<ConsumableUsageLog[]>([])
   const [showAddPurchase, setShowAddPurchase] = useState(false)
   const [editingPurchase, setEditingPurchase] = useState<ConsumablePurchase | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const [{ data: itemData }, { data: prodData }, { data: purData }] = await Promise.all([
+    const [{ data: itemData }, { data: prodData }, { data: purData }, { data: usageData }] = await Promise.all([
       supabase.from('consumable_items').select('*').eq('id', itemId).single(),
       supabase.from('consumable_products').select('*').eq('id', productId).single(),
       supabase.from('consumable_purchases').select('*').eq('product_id', productId)
         .order('purchase_date', { ascending: false }),
+      supabase.from('consumable_usage_logs').select('*').eq('product_id', productId)
+        .order('logged_at', { ascending: true }),
     ])
     if (itemData) setItem(itemData as ConsumableItem)
     if (prodData) setProduct(prodData as ConsumableProduct)
     setPurchases((purData as ConsumablePurchase[]) || [])
+    setUsageLogs((usageData as ConsumableUsageLog[]) || [])
   }, [itemId, productId])
+
+  async function logUsage(action: 'opened' | 'finished') {
+    if (!profile) return
+    await supabase.from('consumable_usage_logs').insert({
+      profile_id: profile.id,
+      product_id: productId,
+      action,
+      logged_at: format(new Date(), 'yyyy-MM-dd'),
+    })
+    load()
+  }
 
   useEffect(() => { load() }, [load])
 
@@ -288,8 +303,24 @@ export default function ProductDetailPage() {
     return Math.round(total / (sorted.length - 1))
   })()
 
+  const avgUsageDays = (() => {
+    const sorted = [...usageLogs]
+    const durations: number[] = []
+    let openDate: string | null = null
+    for (const log of sorted) {
+      if (log.action === 'opened') { openDate = log.logged_at }
+      else if (log.action === 'finished' && openDate) {
+        durations.push(differenceInCalendarDays(parseISO(log.logged_at), parseISO(openDate)))
+        openDate = null
+      }
+    }
+    return durations.length ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length) : null
+  })()
+  const hasOpenUnit = usageLogs.length > 0 && usageLogs[usageLogs.length - 1].action === 'opened'
+  const finishedCount = usageLogs.filter(l => l.action === 'finished').length
+
   const latest = purchases[0]
-  const effectiveDays = product.estimated_days ?? avgInterval
+  const effectiveDays = product.estimated_days ?? avgUsageDays ?? avgInterval
   const nextBuy = latest && effectiveDays
     ? addDays(parseISO(latest.purchase_date), effectiveDays) : null
   const daysLeft = nextBuy ? Math.ceil((nextBuy.getTime() - Date.now()) / 86400000) : null
@@ -314,6 +345,16 @@ export default function ProductDetailPage() {
                 {item.name}
               </p>
             </div>
+            <button onClick={() => logUsage('opened')}
+              className={`flex items-center gap-1 text-xs font-medium shrink-0 ${hasOpenUnit ? 'text-gray-300' : 'text-purple-500'}`}
+              title="記錄開封">
+              <PackageOpen className="h-4 w-4" />開封
+            </button>
+            <button onClick={() => logUsage('finished')}
+              className={`flex items-center gap-1 text-xs font-medium shrink-0 ${hasOpenUnit ? 'text-orange-500' : 'text-gray-300'}`}
+              title="記錄用完">
+              <PackageCheck className="h-4 w-4" />用完
+            </button>
             <button
               onClick={() => setShowAddPurchase(true)}
               className="flex items-center gap-1 text-xs text-green-600 font-medium shrink-0"
@@ -344,8 +385,18 @@ export default function ProductDetailPage() {
               <p className="text-xs text-gray-400">距下次購買</p>
             </div>
           </div>
-          {(minPrice != null || product.note) && (
+          {(minPrice != null || product.note || avgUsageDays !== null) && (
             <div className="mt-3 pt-3 border-t space-y-1">
+              {avgUsageDays !== null && (
+                <p className="text-xs text-gray-500">
+                  實際使用 <span className="font-semibold text-purple-600">{avgUsageDays} 天/瓶</span>
+                  <span className="text-gray-400 ml-1">（{finishedCount} 瓶記錄）</span>
+                  {hasOpenUnit && <span className="ml-2 text-purple-400">● 使用中</span>}
+                </p>
+              )}
+              {!avgUsageDays && hasOpenUnit && (
+                <p className="text-xs text-purple-500">● 使用中</p>
+              )}
               {minPrice != null && (
                 <p className="text-xs text-gray-500">
                   歷史最低 <span className="font-semibold text-green-600">NT${minPrice.toFixed(0)}/{product.package_unit?.trim() || '包'}</span>

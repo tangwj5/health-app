@@ -102,7 +102,18 @@ export interface ConsumableItem {
   name: string
   category: ConsumableCategory
   unit: string
+  track_restock: boolean
   photo_url: string | null
+  created_at: string
+}
+
+export interface ConsumableUsageLog {
+  id: string
+  profile_id: string
+  product_id: string
+  action: 'opened' | 'finished'
+  logged_at: string
+  note: string | null
   created_at: string
 }
 

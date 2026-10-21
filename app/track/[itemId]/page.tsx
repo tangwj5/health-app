@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/lib/store'
 import { BottomNav } from '@/components/layout/BottomNav'
-import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, X, Star, Camera, Package } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Pencil, Trash2, X, Star, Camera, Package, ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 import { format, parseISO, addDays } from 'date-fns'
 import type { ConsumableItem, ConsumableProduct, ConsumablePurchase } from '@/types'
@@ -454,6 +454,15 @@ export default function ItemDetailPage() {
 
   useEffect(() => { if (profile) load() }, [load])
 
+  async function toggleRestock() {
+    if (!item) return
+    const { data } = await supabase
+      .from('consumable_items')
+      .update({ track_restock: !item.track_restock })
+      .eq('id', item.id).select().single()
+    if (data) setItem(data as ConsumableItem)
+  }
+
   async function deleteProduct(id: string) {
     await supabase.from('consumable_products').delete().eq('id', id)
     load()
@@ -495,7 +504,14 @@ export default function ItemDetailPage() {
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
               </div>
-              <p className="text-xs text-gray-400">{item.category}・單位：{unit || '（未設定）'}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-400">{item.category}・單位：{unit || '（未設定）'}</p>
+                <button onClick={toggleRestock} title={item.track_restock ? '關閉補貨提醒' : '開啟補貨提醒'}
+                  className={`flex items-center gap-1 text-xs font-medium transition-colors ${item.track_restock ? 'text-green-500' : 'text-gray-300 hover:text-gray-400'}`}>
+                  <ShoppingCart className="h-3.5 w-3.5" />
+                  {item.track_restock ? '補貨追蹤' : ''}
+                </button>
+              </div>
             </div>
             <button
               onClick={() => setShowAddProduct(true)}
