@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const { imageBase64, mimeType } = await req.json()
   if (!imageBase64) return NextResponse.json({ error: 'No image provided' }, { status: 400 })
 
-  const prompt = `你是一個收據辨識工具。請仔細閱讀這張收據圖片，列出所有購買品項（包含COUPON/折扣行，金額填負數）。
+  const prompt = `你是一個收據辨識工具。請仔細閱讀這張收據圖片，列出所有購買品項。
 
 請回傳 JSON 格式：
 {
@@ -17,12 +17,17 @@ export async function POST(req: NextRequest) {
   "items": [
     {
       "name": "品項名稱",
-      "price": 金額（數字，台幣；COUPON/折扣填負數）,
+      "price": 單價（每一個/每一件的價格，台幣數字；折扣/COUPON 行填負數總折扣金額），
       "quantity": 數量（整數，預設1）,
       "category": "食物或食物且消耗品或用品或用品且消耗品"
     }
   ]
 }
+
+重要規則：
+- price 是「單價」（每件單價），不是總金額。若收據顯示「×4 $196」，則 price=49、quantity=4。
+- 折扣、COUPON、促銷回饋請保留為獨立品項，price 填負數（例如折扣 -40 元則 price=-40, quantity=1），不要直接修改其他品項的單價。
+- 不要把折扣金額折入品項單價，讓折扣保持獨立行。
 
 分類規則（四選一，必須完全一致）：
 - 食物：食品、飲料、生鮮、零食、即食品等食物類
