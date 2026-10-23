@@ -125,7 +125,7 @@ export function TempReceiptPanel({
         profile_id: profileId,
         purchase_date: linkingItem.purchase_date,
         store: linkingItem.store ?? '未知通路',
-        price: linkingItem.price * linkingItem.quantity,
+        price: linkingItem.price,
         quantity: qty,
         is_promotion: false,
         note: linkingItem.name,
@@ -324,7 +324,7 @@ export function TempReceiptPanel({
                                       </span>
                                       {p.item_unit && parsedQty > 0 && (
                                         <span className="text-xs text-blue-500 shrink-0">
-                                          ${(item.price * item.quantity / parsedQty).toFixed(2)}/{p.item_unit}
+                                          ${(item.price / parsedQty).toFixed(2)}/{p.item_unit}
                                         </span>
                                       )}
                                     </button>
@@ -389,7 +389,7 @@ export function TempReceiptPanel({
                                   <span className="text-xs text-gray-500">{quickCreate.unit || '單位'}</span>
                                   {quickCreate.unit && parseFloat(quickCreate.purchaseQty) > 0 && (
                                     <span className="text-xs text-blue-600 ml-auto">
-                                      ${(item.price * item.quantity / parseFloat(quickCreate.purchaseQty)).toFixed(2)}/{quickCreate.unit}
+                                      ${(item.price / parseFloat(quickCreate.purchaseQty)).toFixed(2)}/{quickCreate.unit}
                                     </span>
                                   )}
                                 </div>
