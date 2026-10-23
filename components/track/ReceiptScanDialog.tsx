@@ -161,13 +161,14 @@ export function ReceiptScanDialog({
     }
   }
 
-  // Effective price = item.price + all discounts applied to this item
+  // Effective per-unit price = base + (total discount / quantity)
   function effectivePrice(idx: number): number {
     const base = items[idx].price
-    const discounts = Object.entries(discountTarget)
+    const qty = items[idx].quantity || 1
+    const totalDiscount = Object.entries(discountTarget)
       .filter(([, target]) => target === idx)
       .reduce((sum, [discIdx]) => sum + items[Number(discIdx)].price, 0)
-    return base + discounts
+    return base + totalDiscount / qty
   }
 
   // Indices of discount rows that are assigned to a given item
@@ -302,7 +303,7 @@ export function ReceiptScanDialog({
             profile_id: profileId,
             purchase_date: purchaseDate,
             store: storeVal,
-            price: netPrice,
+            price: netPrice * purchaseQty,
             quantity: purchaseQty,
             is_promotion: netPrice < item.price,
             note: item.name,
@@ -451,9 +452,9 @@ export function ReceiptScanDialog({
                             {myDiscounts.length > 0 && (
                               <>
                                 <span className="text-xs text-gray-300">→</span>
-                                <p className="text-xs font-semibold text-green-600">淨價 ${netPrice}</p>
+                                <p className="text-xs font-semibold text-green-600">淨價 ${netPrice}/件</p>
                                 <span className="text-xs text-gray-400">
-                                  （折 ${(item.price - netPrice) * -1}）
+                                  （折 ${myDiscounts.reduce((s, di) => s + items[di].price, 0)}）
                                 </span>
                               </>
                             )}
@@ -531,10 +532,10 @@ export function ReceiptScanDialog({
                               const pkgLabel = linkedProd.package_unit?.trim() || '包'
                               const unitLabel = linkedProd.item_unit?.trim() || ''
                               const qty = parseFloat(linkedQuantity[idx] ?? String(item.quantity))
-                              const up = qty > 0
+                              const up = netPrice > 0
                                 ? (linkedProd.capacity
-                                    ? netPrice / (linkedProd.capacity * qty)
-                                    : netPrice / qty)
+                                    ? netPrice / linkedProd.capacity
+                                    : netPrice)
                                 : null
                               const upLabel = linkedProd.capacity && unitLabel ? unitLabel : pkgLabel
                               return (
