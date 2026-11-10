@@ -469,6 +469,12 @@ export default function ItemDetailPage() {
     setConfirmDelete(null)
   }
 
+  async function deleteItem() {
+    if (!item || products.length > 0) return
+    await supabase.from('consumable_items').delete().eq('id', item.id)
+    router.push('/track?tab=消耗品')
+  }
+
   if (!item) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <p className="text-sm text-gray-400">載入中…</p>
@@ -525,8 +531,12 @@ export default function ItemDetailPage() {
 
       <div className="max-w-lg mx-auto px-4 py-4 space-y-3">
         {products.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
+          <div className="text-center py-16 text-gray-400 space-y-3">
             <p className="text-sm">尚無商品，點右上角新增</p>
+            <button onClick={deleteItem}
+              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 mx-auto transition-colors">
+              <Trash2 className="h-3.5 w-3.5" />刪除此品項
+            </button>
           </div>
         ) : products.map(prod => {
           const up = latestUnitPrice(prod)
