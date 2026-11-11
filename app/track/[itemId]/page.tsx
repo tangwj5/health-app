@@ -464,14 +464,16 @@ export default function ItemDetailPage() {
   }
 
   async function deleteProduct(id: string) {
-    await supabase.from('consumable_products').delete().eq('id', id)
+    const { error } = await supabase.from('consumable_products').delete().eq('id', id)
+    if (error) { alert('刪除失敗：' + error.message); return }
     load()
     setConfirmDelete(null)
   }
 
   async function deleteItem() {
     if (!item || products.length > 0) return
-    await supabase.from('consumable_items').delete().eq('id', item.id)
+    const { error } = await supabase.from('consumable_items').delete().eq('id', item.id)
+    if (error) { alert('刪除失敗：' + error.message); return }
     router.push('/track?tab=消耗品')
   }
 
