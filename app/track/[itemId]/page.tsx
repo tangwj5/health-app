@@ -464,6 +464,7 @@ export default function ItemDetailPage() {
   }
 
   async function deleteProduct(id: string) {
+    await supabase.from('receipt_temp_items').update({ linked_product_id: null }).eq('linked_product_id', id)
     const { error } = await supabase.from('consumable_products').delete().eq('id', id)
     if (error) { alert('刪除失敗：' + error.message); return }
     load()
